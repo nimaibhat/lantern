@@ -788,6 +788,14 @@ body:has(.dash) {
   color: var(--d-muted);
 }
 
+/* Settings > Rules: one row per rule, wrapping on narrow screens */
+.rule-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.rule-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; border: 1px solid var(--d-border); border-radius: 12px; }
+.rule-row label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--d-muted); }
+.rule-row select { min-width: 0; max-width: 100%; }
+.rule-row .rule-check { flex-direction: row; align-items: center; padding-bottom: 10px; }
+.rule-row .btn { margin-left: auto; }
+
 .rows li {
   display: flex;
   align-items: center;

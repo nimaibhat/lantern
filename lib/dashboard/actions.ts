@@ -7,6 +7,7 @@ import { db } from "@/lib/supabase/server";
 import { replaceRuleItems } from "@/lib/audit/store";
 import type { AuditStatus, Mobility, RoomPreview, RoutineStep } from "@/lib/types";
 import { isMobility } from "@/lib/dashboard/mobility";
+import { checkRules, toRows, type RuleInput } from "@/lib/dashboard/zone-rules";
 import { getHomeModel, reloadMonitor, syncHazards } from "@/lib/world/store";
 import { startRoomPreview } from "@/lib/scan/room-preview";
 import { checkWorld } from "@/lib/scan/worldlabs";
@@ -58,6 +59,29 @@ export async function saveHousehold(input: { name: string; patientName: string; 
   if (error) throw new Error(error.message);
   await reloadMonitor("/household/reload");
   revalidatePath("/dashboard", "layout");
+}
+
+// Saves the Rules card in Settings: replaces the home's zone rules, then the monitor reloads them, so a change to
+// "kitchen 10 PM to 6 AM" takes effect on the next move.
+export async function saveZoneRules(input: RuleInput[]) {
+  const problem = checkRules(input);
+  if (problem) throw new Error(problem);
+  if (!db) return;
+  const householdId = await writableHouseholdId();
+  const rules = input.map(({ roomKind, action, startHour, endHour }) => ({ roomKind, action, startHour, endHour }));
+  // Delete then insert: a failed insert would leave the home with no rules, and the monitor would fall back to its
+  // defaults, so put the old ones back if it fails.
+  const { data: before, error: readError } = await db.from("zone_rules").select().eq("household_id", householdId);
+  if (readError) throw new Error(readError.message);
+  const { error: delError } = await db.from("zone_rules").delete().eq("household_id", householdId);
+  if (delError) throw new Error(delError.message);
+  const { error } = await db.from("zone_rules").insert(toRows(householdId, rules));
+  if (error) {
+    if (before?.length) await db.from("zone_rules").insert(before);
+    throw new Error(error.message);
+  }
+  await reloadMonitor("/household/reload");
+  revalidatePath("/dashboard/settings");
 }
 
 export async function addRoutineStep(input: { time: string; title: string; roomId: string }): Promise<RoutineStep> {

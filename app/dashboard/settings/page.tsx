@@ -1,11 +1,12 @@
-import { getContacts, getHousehold, getReceivers, getRooms } from "@/lib/dashboard/data";
+import { getContacts, getHousehold, getReceivers, getRooms, getZoneRules } from "@/lib/dashboard/data";
 import { roomName } from "@/lib/dashboard/rooms";
 import { HouseholdForm } from "./household-form";
 import { PairPhone } from "./pair-phone";
 import { RedirectMedia } from "./redirect-media";
+import { ZoneRulesForm } from "./zone-rules-form";
 
 export default async function SettingsPage() {
-  const [household, contacts, receivers, rooms] = await Promise.all([getHousehold(), getContacts(), getReceivers(), getRooms()]);
+  const [household, contacts, receivers, rooms, rules] = await Promise.all([getHousehold(), getContacts(), getReceivers(), getRooms(), getZoneRules()]);
 
   return (
     <div className="settings">
@@ -18,6 +19,13 @@ export default async function SettingsPage() {
           <h2>Household</h2>
         </div>
         <HouseholdForm household={household} />
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Rules</h2>
+        </div>
+        <ZoneRulesForm rules={rules} />
       </section>
 
       <section className="card">

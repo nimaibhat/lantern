@@ -5,6 +5,7 @@ import * as mock from "./mock";
 import { currentHouseholdId, DEMO_HOUSEHOLD_ID } from "@/lib/households";
 import { db } from "@/lib/supabase/server";
 import type { Activity, AuditItem, Contact, Household, Receiver, RiskEvent, Room, RoutineStep, ScanSummary } from "@/lib/types";
+import type { RuleInput } from "./zone-rules";
 
 // Reads for the dashboard. Each function maps database rows (snake_case) to the shared types.
 
@@ -95,6 +96,14 @@ export async function getLatestScan(): Promise<ScanSummary | null> {
       ? clockIn(scan.created_at, timezone)
       : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: timezone }).format(new Date(scan.created_at)),
   };
+}
+
+// The home's zone rules for the Settings editor, in a stable order (by room, then start hour).
+export async function getZoneRules(): Promise<RuleInput[]> {
+  if (!db) return [];
+  return rows(await db.from("zone_rules").select().eq("household_id", await currentHouseholdId()))
+    .map((r) => ({ roomKind: r.room_kind, action: r.action, startHour: r.start_hour, endHour: r.end_hour }))
+    .sort((a, b) => a.roomKind.localeCompare(b.roomKind) || a.startHour - b.startHour);
 }
 
 export async function getContacts(): Promise<Contact[]> {
