@@ -7,7 +7,7 @@ speaks.
 | | Family call | Companion |
 |---|---|---|
 | Who hears it | the primary contact's phone | the person at home, on the TV page |
-| When | the call step of the escalation, after the family was texted | from the second reminder, if the first did not work |
+| When | the call step of the escalation, after the family was texted | from the second reminder, if the first did not work (`NEXT_PUBLIC_VAPI_COMPANION_FROM_CUE=1`: from the first) |
 | Voice | `Elliot` (Vapi: "natural, calm") | `Zoe` (Vapi: "calm, soothing"), speed 0.9 |
 | Model | `claude-haiku-5-5` (Anthropic through Vapi), short replies | same |
 | Can do | answer questions from the facts, hear "yes, I'll go" or "no" | talk gently, ask the family for help |

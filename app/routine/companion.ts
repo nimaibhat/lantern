@@ -8,6 +8,9 @@ import { HELP_TOOL, companionAssistant, type CompanionFacts } from "@/lib/cues/v
 
 const KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
 export const companionEnabled = !!KEY && process.env.NEXT_PUBLIC_VAPI_COMPANION === "1";
+// Which reminder the companion takes over from. Default 2: the first reminder is the scripted voice.
+// 1 = the companion's voice from the very first reminder.
+export const companionFromCue = Math.max(1, Number(process.env.NEXT_PUBLIC_VAPI_COMPANION_FROM_CUE) || 2);
 
 // The slice of the SDK we use. Our assistant is plain JSON (lib/cues/vapi.ts), shared with the monitor.
 interface VapiLike {

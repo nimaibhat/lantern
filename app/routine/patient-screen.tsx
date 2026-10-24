@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { friendlyTime, nextStep } from "@/lib/cues/routine";
 import { resolveRoomId } from "@/lib/dashboard/rooms";
 import type { LiveFrame, PatientMode, RiskKind, Room, RoutineStep } from "@/lib/types";
-import { companionEnabled, startCompanion, warmMicrophone, type Companion } from "./companion";
+import { companionEnabled, companionFromCue, startCompanion, warmMicrophone, type Companion } from "./companion";
 import { RoutinePlayer } from "./player";
 import { chime, hush, speak, unlockAudio } from "./sound";
 import "./patient.css";
@@ -170,7 +170,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
       await chime(night);
       if (cancelled) return;
       const kind = view.riskEventId ? kinds.current.get(view.riskEventId) : undefined;
-      if (companionEnabled && (view.cue ?? 1) >= 2 && kind && view.message && view.riskEventId) {
+      if (companionEnabled && (view.cue ?? 1) >= companionFromCue && kind && view.message && view.riskEventId) {
         const riskId = view.riskEventId;
         try {
           const c = await startCompanion({ name, kind, message: view.message, detail: view.detail, night }, {
