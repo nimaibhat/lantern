@@ -1,0 +1,65 @@
+{
+  "csv": "rssi-samples.fake.csv",
+  "model": "knn-holdout.json",
+  "dataset": "synthetic",
+  "sessions": 11,
+  "nights": 9,
+  "roomAccuracy": 0.9145141451414515,
+  "roomAccuracyNoHmm": 0.9297495418448382,
+  "impossibleJumps": 0,
+  "impossibleJumpsNoHmm": 7,
+  "roomChanges": 71,
+  "roomChangesNoHmm": 72,
+  "trueRoomChanges": 42,
+  "predictions": 26,
+  "predictionsCorrect": 17,
+  "leadTimesS": [
+    18,
+    18,
+    7,
+    9,
+    18,
+    -4,
+    24,
+    19,
+    28,
+    10,
+    17,
+    24,
+    18,
+    23,
+    12,
+    11,
+    1
+  ],
+  "falseRedirectsPerNight": 0.3333333333333333,
+  "latencyMs": 2000,
+  "positionErrorIn": 44,
+  "positionErrorRoomCenterIn": 46,
+  "unplugged": {
+    "bedroom": {
+      "accuracy": 0.8787692307692307,
+      "accuracyUnmasked": 0.3883076923076923,
+      "falseRedirects": 7,
+      "falseRedirectsUnmasked": 48
+    },
+    "hallway": {
+      "accuracy": 0.9052890528905289,
+      "accuracyUnmasked": 0.7380073800738007,
+      "falseRedirects": 3,
+      "falseRedirectsUnmasked": 8
+    },
+    "kitchen": {
+      "accuracy": 0.7367773677736777,
+      "accuracyUnmasked": 0.5325953259532595,
+      "falseRedirects": 5,
+      "falseRedirectsUnmasked": 12
+    },
+    "tv-room": {
+      "accuracy": 0.9182041820418204,
+      "accuracyUnmasked": 0.8474784747847478,
+      "falseRedirects": 1,
+      "falseRedirectsUnmasked": 8
+    }
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "dataset": "synthetic",
+  "csv": "rssi-samples.fake.csv",
+  "createdAt": "2026-10-23T20:11:59+00:00",
+  "windows": 3797,
+  "sessions": 29,
+  "windowsPerRoom": {
+    "bathroom": 463,
+    "bedroom": 1076,
+    "front-door": 360,
+    "hallway": 765,
+    "kitchen": 723,
+    "tv-room": 410
+  },
+  "labels": [
+    "bathroom",
+    "bedroom",
+    "front-door",
+    "hallway",
+    "kitchen",
+    "tv-room"
+  ],
+  "order": [
+    "bedroom",
+    "hallway",
+    "kitchen",
+    "tv-room"
+  ],
+  "shipped": "knn7",
+  "k": 7,
+  "models": {
+    "baseline": {
+      "accuracy": 0.7584935475375296
+    },
+    "knn3": {
+      "accuracy": 0.9022912825915196
+    },
+    "knn5": {
+      "accuracy": 0.9049249407426916
+    },
+    "knn7": {
+      "accuracy": 0.9096655254148012
+    },
+    "rf": {
+      "accuracy": 0.9030813800368712
+    }
+  },
+  "accuracy": 0.9096655254148012,
+  "perRoom": {
+    "bathroom": 0.7365010799136069,
+    "bedroom": 0.9758364312267658,
+    "front-door": 0.7361111111111112,
+    "hallway": 0.8954248366013072,
+    "kitchen": 0.9778699861687413,
+    "tv-room": 0.9902439024390244
+  },
+  "confusion": [
+    [
+      341,
+      0,
+      96,
+      26,
+      0,
+      0
+    ],
+    [
+      2,
+      1050,
+      0,
+      22,
+      2,
+      0
+    ],
+    [
+      86,
+      0,
+      265,
+      9,
+      0,
+      0
+    ],
+    [
+      29,
+      21,
+      15,
+      685,
+      15,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      16,
+      707,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      4,
+      0,
+      406
+    ]
+  ],
+  "baselineAccuracy": 0.7584935475375296,
+  "baselinePerRoom": {
+    "bathroom": 0.0,
+    "bedroom": 0.9879182156133829,
+    "front-door": 0.0,
+    "hallway": 0.9150326797385621,
+    "kitchen": 0.9806362378976486,
+    "tv-room": 0.9951219512195122
+  }
+}

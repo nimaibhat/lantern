@@ -47,6 +47,7 @@ Replace all fake/mock data paths with live monitor WebSocket data and confirm th
 Not yet tested. Requires:
 1. Install LightBlue on iPhone.
 2. Create a virtual peripheral advertising UUID `4C414E54-4552-4E00-A000-000000000001`.
+3. Run `python listener/listener.py --id bedroom --url ws://[laptop-ip]:8787/ws/listener?token=lantern-dev` on 3+ laptops.
 4. Walk the phone between rooms and observe RSSI changes on the Devices page.
 
 ## Files changed
