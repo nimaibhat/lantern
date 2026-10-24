@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { LocationEvent, RiskEvent, RoomKind, ZoneRule } from "@/lib/types";
 import { loadConfig } from "../config";
 import { rules } from "./index";
+import { ruleFromRow } from "./settings";
 import { startMonitor } from "../server";
 import { BATHROOM_STAY_MS, NIGHT_WANDER_MS, NO_MOVEMENT_MS, PREDICTION_WINDOW_MS, createRiskEngine, isQuiet, localMinutes, ruleFor, within } from "./risk";
 
@@ -220,4 +221,10 @@ test("DEMO_HOUR pins the hour so an afternoon demo is treated as night", () => {
   assert.equal(localMinutes(afternoon, "America/New_York", ""), 15 * 60 + 7);
   assert.equal(localMinutes(afternoon, "America/New_York", "3"), 3 * 60 + 7);
   assert.equal(localMinutes(afternoon, "America/New_York", "99"), 15 * 60 + 7); // out of range is ignored
+});
+
+test("zone rules saved in Supabase read back as the monitor's rules", () => {
+  const rule = ruleFromRow({ id: "h1-living-greet", household_id: "h1", room_kind: "living", kind: null, start_hour: 8, end_hour: 20, action: "greet" });
+  assert.deepEqual(rule, { id: "h1-living-greet", householdId: "h1", roomKind: "living", startHour: 8, endHour: 20, action: "greet" });
+  assert.equal(ruleFromRow({ id: "k", household_id: "h1", room_kind: "kitchen", kind: "kitchen-night", start_hour: 22, end_hour: 6, action: "redirect" }).kind, "kitchen-night");
 });

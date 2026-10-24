@@ -773,6 +773,13 @@ body:has(.dash) {
   gap: 14px;
 }
 
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
 .form-grid label {
   display: flex;
   flex-direction: column;

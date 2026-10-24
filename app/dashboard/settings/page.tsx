@@ -1,10 +1,9 @@
 import { getContacts, getHousehold, getReceivers, getRooms } from "@/lib/dashboard/data";
 import { roomName } from "@/lib/dashboard/rooms";
-import { MobilityPicker } from "./mobility-picker";
+import { HouseholdForm } from "./household-form";
 import { PairPhone } from "./pair-phone";
 import { RedirectMedia } from "./redirect-media";
 
-// Loads from Supabase. Editing and saving come later.
 export default async function SettingsPage() {
   const [household, contacts, receivers, rooms] = await Promise.all([getHousehold(), getContacts(), getReceivers(), getRooms()]);
 
@@ -18,25 +17,7 @@ export default async function SettingsPage() {
         <div className="card-head">
           <h2>Household</h2>
         </div>
-        <div className="form-grid">
-          <label>
-            Home name
-            <input defaultValue={household.name} />
-          </label>
-          <label>
-            Patient
-            <input defaultValue={household.patientName} />
-          </label>
-          <MobilityPicker name={household.patientName} initial={household.mobility} />
-          <label>
-            Quiet hours start
-            <input type="time" defaultValue={household.quietHoursStart} />
-          </label>
-          <label>
-            Quiet hours end
-            <input type="time" defaultValue={household.quietHoursEnd} />
-          </label>
-        </div>
+        <HouseholdForm household={household} />
       </section>
 
       <section className="card">
