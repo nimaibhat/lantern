@@ -11,7 +11,7 @@ function utf16leBase64(text: string): string {
   return btoa(binary);
 }
 
-function earScript(deviceId: string, postUrl: string): string {
+export function earScript(deviceId: string, postUrl: string): string {
   if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
   const post = postUrl.trim().replace(/\/$/, "");
   if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
@@ -30,6 +30,9 @@ public class LanternEar {
       var name = adv.GetType().GetProperty("LocalName").GetValue(adv, null) as string ?? "";
       bool hit = name.ToLowerInvariant().Contains("lantern");
       if (!hit) {
+        try { hit = SectionHasLantern(adv); } catch { }
+      }
+      if (!hit) {
         var uuids = adv.GetType().GetProperty("ServiceUuids").GetValue(adv, null) as System.Collections.IEnumerable;
         if (uuids != null) {
           foreach (var u in uuids) {
@@ -44,6 +47,26 @@ public class LanternEar {
     } catch (System.Exception ex) {
       Err = ex.Message;
     }
+  }
+  static bool SectionHasLantern(object adv) {
+    var sections = adv.GetType().GetProperty("DataSections").GetValue(adv, null) as System.Collections.IEnumerable;
+    if (sections == null) return false;
+    foreach (var section in sections) {
+      int type = System.Convert.ToInt32(section.GetType().GetProperty("DataType").GetValue(section, null));
+      if (type != 8 && type != 9) continue;
+      var buffer = section.GetType().GetProperty("Data").GetValue(section, null);
+      if (buffer == null) continue;
+      var asm = System.Reflection.Assembly.Load("System.Runtime.WindowsRuntime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+      var ext = asm.GetType("System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions");
+      var toArray = ext.GetMethods()[0];
+      foreach (var method in ext.GetMethods()) {
+        if (method.Name == "ToArray" && method.GetParameters().Length == 1) { toArray = method; break; }
+      }
+      var bytes = (byte[])toArray.Invoke(null, new object[] { buffer });
+      var text = System.Text.Encoding.UTF8.GetString(bytes).ToLowerInvariant();
+      if (text.Contains("lantern")) return true;
+    }
+    return false;
   }
 }
 '@
@@ -91,36 +114,22 @@ export function earBat(deviceId: string, postUrl: string, label: string): string
   return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${command}\r\n`;
 }
 
-// A single EncodedCommand of this script is about 9000 characters. Wscript runs that
-// line and PowerShell exits before it scans. Write the script in short pieces, then
-// start it with a short command.
-export function hiddenLauncher(script: string): string {
-  const encoded = utf16leBase64(script);
-  const chunks = encoded.match(/.{1,480}/g) ?? [];
-  const writes = chunks.map((chunk) => `out.Write "${chunk}"`).join("\r\n");
+// The scanner script is about 9000 characters. A downloaded file that long never
+// starts. This file is short: the other laptop downloads it, then pulls the script.
+export function earHidden(deviceId: string, postUrl: string, _label: string): string {
+  if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
+  const post = postUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
+  const earUrl = `${post}/ear?id=${deviceId}`;
   const command = [
-    "$t=$env:TEMP",
-    "$b=[IO.File]::ReadAllText((Join-Path $t 'lantern-ear.b64'))",
-    "$s=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($b -replace '\\s','')))",
-    "[IO.File]::WriteAllText((Join-Path $t 'lantern-ear.ps1'), $s)",
-    "& (Join-Path $t 'lantern-ear.ps1')",
+    "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}",
+    "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12",
+    `$u='${earUrl}'`,
+    "$p=Join-Path $env:TEMP 'lantern-ear.ps1'",
+    "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $p",
+    "Unblock-File -Path $p",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $p",
   ].join("; ");
-  return [
-    `Set shell = CreateObject("Wscript.Shell")`,
-    `Set fso = CreateObject("Scripting.FileSystemObject")`,
-    `folder = shell.ExpandEnvironmentStrings("%TEMP%")`,
-    `Set out = fso.CreateTextFile(folder & "\\lantern-ear.b64", True)`,
-    writes,
-    `out.Close`,
-    `shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""${command}""", 0, False`,
-    ``,
-  ].join("\r\n");
-}
-
-// Same listener as the bat, started with no window. Each Windows laptop runs its own copy.
-export function earHidden(deviceId: string, postUrl: string, label: string): string {
-  const file = hiddenLauncher(earScript(deviceId, postUrl));
-  const run = file.split("shell.Run ")[1] ?? "";
-  if (run.length > 4000) throw new Error("launcher command is too long");
-  return file;
+  if (command.length > 2000) throw new Error("launcher command is too long");
+  return `Set shell = CreateObject("Wscript.Shell")\r\nshell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""${command}""", 0, False\r\n`;
 }

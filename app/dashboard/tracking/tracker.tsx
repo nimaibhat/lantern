@@ -314,7 +314,6 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setLabels((prev) => ({ ...prev, [data.deviceId]: label }));
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
-    if (listen && data.listening === true) setNote("This computer is looking for the phone. Leave this page open.");
     if (listen && data.listening === false) setNote("This computer is already scanning as another laptop. Pair on the other computer.");
     return true;
   }
@@ -518,6 +517,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const heardCards = cards.filter((c) => c.reading?.online && (c.reading?.rssi ?? -100) > -100);
   const lead = heardCards.find((c) => c.id === call?.receiverId);
   const others = heardCards.filter((c) => c.id !== call?.receiverId);
+  const shownNote = lead && /looking for the phone|Leave this page open|is listening/.test(note) ? "" : note;
   const nameOf = (id: string) => labels[id] || "Unnamed";
   const mineReading = mineId ? readings[mineId] : undefined;
   const mineHears = !!mineReading?.online && (mineReading?.rssi ?? -100) > -100;
@@ -552,7 +552,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
               <p className="track-dbm">{heard ? Math.round(rssi) : silent ? "No signal" : "Waiting"}</p>
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
-              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
+              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : heardCards.length > 0 ? "No reading from this laptop" : "Waiting for LanternTag"}</p>
               {!heard && (
                 <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(c.id, nameOf(c.id))}>
                   Pair
@@ -606,7 +606,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           </div>
         </form>
       )}
-      {note && <p>{note}</p>}
+      {shownNote && <p>{shownNote}</p>}
     </div>
   );
 }
