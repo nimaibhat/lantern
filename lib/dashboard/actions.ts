@@ -5,7 +5,8 @@ import { createPairCode } from "@/lib/scan/pairing";
 import { currentHouseholdId, writableHouseholdId } from "@/lib/households";
 import { db } from "@/lib/supabase/server";
 import type { AuditStatus, RoomPreview, RoutineStep } from "@/lib/types";
-import { checkWorld, startWorld } from "@/lib/scan/worldlabs";
+import { startRoomPreview } from "@/lib/scan/room-preview";
+import { checkWorld } from "@/lib/scan/worldlabs";
 
 // Writes from the dashboard. These run on the server with the secret key, scoped to the home being viewed
 // (lib/households.ts). On the public deploy the demo home is read-only, so these throw there.
@@ -55,17 +56,7 @@ export async function pairPhone() {
 
 // Starts a World Labs 3D preview from the room's photos. Takes about 5 minutes; the page polls refreshRoomPreview.
 export async function generateRoomPreview(roomId: string): Promise<RoomPreview> {
-  if (!db) throw new Error("Supabase is not configured");
-  const { data: room } = await db.from("rooms").select("name, photo_paths").eq("id", roomId).eq("household_id", await writableHouseholdId()).maybeSingle();
-  if (!room) throw new Error("Room not found");
-  if (!room.photo_paths.length) throw new Error("Scan this room with photos first");
-
-  // World Labs downloads the photos itself, so give it signed links that outlive the generation.
-  const { data: signed } = await db.storage.from("photos").createSignedUrls(room.photo_paths, 6 * 60 * 60);
-  const urls = (signed ?? []).flatMap((s) => (s.signedUrl ? [s.signedUrl] : []));
-  const operationId = await startWorld(room.name, urls);
-
-  await db.from("rooms").update({ preview_status: "generating", preview_operation_id: operationId }).eq("id", roomId);
+  if (!(await startRoomPreview(roomId, await writableHouseholdId()))) throw new Error("Scan this room with photos first");
   return { status: "generating" };
 }
 

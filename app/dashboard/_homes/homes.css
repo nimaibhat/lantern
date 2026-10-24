@@ -448,7 +448,9 @@
 
 /* Add a home */
 
-.add-home {
+.add-home > h1,
+.add-lede,
+.add-steps {
   max-width: 680px;
 }
 
@@ -611,5 +613,304 @@
 @media (max-width: 600px) {
   .add-pair {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Building the home from the scan (step 3). Dark like the 3D scene, so the plan reads as light being traced. */
+
+.build-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  min-height: clamp(460px, 64vh, 660px);
+  margin-top: 28px;
+  scroll-margin-top: 20px;
+  background: var(--nw-bg);
+  color: var(--nw-text);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.build-stage.failed {
+  grid-template-columns: 1fr;
+  min-height: 200px;
+}
+
+.bs-scene {
+  position: relative;
+  min-height: 320px;
+}
+
+.bs-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+  color: var(--nw-muted);
+  background-image: radial-gradient(var(--nw-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.bs-empty p {
+  max-width: 34ch;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.bs-pulse {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--nw-amber);
+  box-shadow: 0 0 0 0 rgba(245, 165, 74, 0.5);
+  animation: bs-pulse 1.8s ease-out infinite;
+}
+
+@keyframes bs-pulse {
+  to {
+    box-shadow: 0 0 0 22px rgba(245, 165, 74, 0);
+  }
+}
+
+/* The traced plan */
+
+.bs-plan {
+  position: absolute;
+  inset: 32px;
+  width: calc(100% - 64px);
+  height: calc(100% - 64px);
+  transition: opacity 0.9s ease, transform 0.9s ease;
+}
+
+.lifted .bs-plan {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.bs-room polygon {
+  fill: rgba(245, 165, 74, 0);
+  stroke: var(--nw-amber);
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  filter: drop-shadow(0 0 3px rgba(245, 165, 74, 0.6));
+  animation: bs-trace 0.9s ease-in-out var(--delay) forwards, bs-fill 0.6s ease calc(var(--delay) + 0.9s) forwards;
+}
+
+.bs-room text {
+  fill: var(--nw-text);
+  font-family: var(--font-body), sans-serif;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.bs-room.drawn text {
+  opacity: 0.85;
+}
+
+@keyframes bs-trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bs-fill {
+  to {
+    fill: rgba(245, 165, 74, 0.1);
+  }
+}
+
+.bs-door {
+  fill: var(--nw-text);
+  opacity: 0.7;
+}
+
+.bs-door.narrow {
+  fill: #e0664d;
+  opacity: 1;
+}
+
+.bs-hazard {
+  fill: rgba(245, 165, 74, 0.35);
+  stroke: var(--nw-amber);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bs-pop 0.5s ease-out backwards;
+}
+
+@keyframes bs-pop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+.bs-3d,
+.bs-scene-loading {
+  position: absolute;
+  inset: 0;
+}
+
+.bs-3d {
+  animation: bs-fade 1s ease both;
+}
+
+@keyframes bs-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.bs-open {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--nw-amber);
+  color: #2a1d10;
+  font-weight: 600;
+  text-decoration: none;
+  animation: bs-rise 0.6s ease both;
+}
+
+@keyframes bs-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* The checklist and photos */
+
+.bs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px 26px;
+  border-left: 1px solid var(--nw-line);
+}
+
+.bs-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bs-steps li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 12px;
+  align-items: start;
+  line-height: 1.45;
+  transition: color 0.4s ease;
+}
+
+.bs-steps li.later {
+  color: #6f655b;
+}
+
+.bs-steps li.now {
+  color: var(--nw-text);
+}
+
+.bs-steps li.done {
+  color: var(--nw-text);
+}
+
+.bs-mark {
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+
+.bs-steps li.now .bs-mark {
+  border-color: var(--nw-amber);
+  border-top-color: transparent;
+  animation: bs-spin 0.9s linear infinite;
+}
+
+.bs-steps li.done .bs-mark {
+  border-color: var(--nw-amber);
+  background: var(--nw-amber);
+}
+
+@keyframes bs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bs-photos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.bs-photos li {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 0.4s ease;
+  animation: bs-fade 0.6s ease both;
+}
+
+.bs-photos li.hazard {
+  outline-color: var(--nw-amber);
+}
+
+.bs-photos img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bs-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--nw-muted);
+}
+
+@media (max-width: 880px) {
+  .build-stage {
+    grid-template-columns: 1fr;
+  }
+  .bs-scene {
+    min-height: min(56vh, 420px);
+  }
+  .bs-side {
+    border-left: 0;
+    border-top: 1px solid var(--nw-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-room polygon {
+    animation: none;
+    stroke-dashoffset: 0;
+    fill: rgba(245, 165, 74, 0.1);
+  }
+  .bs-pulse,
+  .bs-steps li.now .bs-mark,
+  .bs-hazard,
+  .bs-3d,
+  .bs-open,
+  .bs-photos li {
+    animation: none;
   }
 }
