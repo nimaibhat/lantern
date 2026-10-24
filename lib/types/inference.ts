@@ -11,12 +11,13 @@ export interface RoomPosterior {
 
 export interface PositionEstimate {
   ts: number;
-  x: number; // inches, clamped inside roomId
+  x: number; // inches
   y: number;
-  roomId: string;
-  confidence: number;
+  roomId: string; // the room the dot is in. Location events (room changes for alerts) come from a steadier tracker
+  confidence: number; // the share of belief in roomId
   source: LocationSource;
   velocity?: Vec2; // inches per second
+  spreadIn?: number; // inches: roughly how far the real spot may be from x, y (the floor grid's spread)
 }
 
 // Emitted only when the room changes.
