@@ -40,13 +40,32 @@ export async function chime(night: boolean): Promise<void> {
   await wait(1600); // both notes, then a breath before the words
 }
 
+// Chrome fills the voice list a moment after the page loads. Speaking before then uses the system default voice
+// (on Windows a man's), so wait for the list, but never more than a second.
+function voices(): Promise<SpeechSynthesisVoice[]> {
+  const now = speechSynthesis.getVoices();
+  if (now.length) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      speechSynthesis.removeEventListener("voiceschanged", done);
+      resolve(speechSynthesis.getVoices());
+    };
+    const timer = setTimeout(done, 1000);
+    speechSynthesis.addEventListener("voiceschanged", done);
+  });
+}
+
 // Resolves when done (or at once without speech support), so the caller can keep the order chime, words, pause.
-export function speak(text: string, night: boolean): Promise<void> {
-  if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return Promise.resolve();
+export async function speak(text: string, night: boolean): Promise<void> {
+  if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const asked = hushes;
+  const list = await voices();
+  if (asked !== hushes) return; // hushed while waiting for the voices
   return new Promise((resolve) => {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    const voice = pickCalmVoice(speechSynthesis.getVoices());
+    const voice = pickCalmVoice(list);
     if (voice) u.voice = voice;
     Object.assign(u, calmSpeech(night));
     u.onend = u.onerror = () => resolve();
@@ -54,6 +73,9 @@ export function speak(text: string, night: boolean): Promise<void> {
   });
 }
 
+let hushes = 0;
+
 export function hush() {
+  hushes++;
   if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
 }
