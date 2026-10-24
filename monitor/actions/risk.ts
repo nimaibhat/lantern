@@ -101,7 +101,9 @@ export function createRiskEngine(deps: RiskDeps) {
 
   function raise(kind: RiskKind, roomId: string, ts: number, extra: Partial<RiskEvent> = {}): RiskEvent | undefined {
     if (open.has(kind)) return;
-    const risk: RiskEvent = { id: newId(), householdId: deps.householdId, kind, roomId, trigger: "detected", state: "detected", source, startedAt: iso(ts), ...extra };
+    // upSince lets the responder count its grace period from getting out of bed, not from reaching the kitchen.
+    const up = outOfBedSince === undefined ? {} : { upSince: iso(outOfBedSince) };
+    const risk: RiskEvent = { id: newId(), householdId: deps.householdId, kind, roomId, trigger: "detected", state: "detected", source, startedAt: iso(ts), ...up, ...extra };
     send(risk);
     return risk;
   }

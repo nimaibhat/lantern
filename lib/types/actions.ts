@@ -37,9 +37,13 @@ export interface RiskEvent {
   predictedAt?: string;
   arrivedAt?: string;
   leadTimeS?: number;
+  upSince?: string; // when they left the bedroom; the grace period counts from here
+  graceUntil?: string; // no cue plays before this (docs/cues.md)
+  cues?: number; // reminders played so far
 }
 
-export type PatientMode = "idle" | "glow" | "photo_voice" | "greeting" | "calm";
+// note: a message the caregiver typed on the dashboard, shown and said on the TV.
+export type PatientMode = "idle" | "glow" | "photo_voice" | "greeting" | "calm" | "note";
 
 export interface PatientState {
   householdId: string;
@@ -48,6 +52,10 @@ export interface PatientState {
   photoPath?: string;
   voicePath?: string;
   riskEventId?: string;
+  detail?: string; // said after the message and shown smaller: where they are and the way back
+  route?: string[]; // room names from here to where we invite them, for the route strip
+  cue?: number; // 1 for the first reminder; the screen chimes before each one
+  roomId?: string; // where they were when this was sent; a screen with ?room= only plays its own room
   updatedAt: string;
 }
 

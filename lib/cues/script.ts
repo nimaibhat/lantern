@@ -81,6 +81,15 @@ export function routinePrompt(name: string, title: string): string {
   if (!title.trim() || new RegExp(`^${escaped}\\b`, "i").test(title.trim())) return title.trim();
   const t = title.replace(new RegExp(`,\\s*${escaped}(?=[.!?,])`, "i"), "").trim();
   const first = t.split(" ")[0];
-  const lower = first.length > 1 && first === first.toUpperCase() ? t : t.charAt(0).toLowerCase() + t.slice(1);
-  return `${name}, ${lower}`;
+  const keep = /^I\b/.test(t) || (first.length > 1 && first === first.toUpperCase());
+  return `${name}, ${keep ? t : t.charAt(0).toLowerCase() + t.slice(1)}`;
+}
+
+export const NOTE_MAX = 200;
+
+// A message a caregiver typed for the TV: one line, no control characters, short enough to read at a glance.
+export function cleanNote(text: unknown): string | undefined {
+  if (typeof text !== "string") return;
+  const t = text.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, NOTE_MAX);
+  return t || undefined;
 }

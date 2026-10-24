@@ -85,4 +85,5 @@ export const PATIENT_LABEL: Record<PatientMode, string> = {
   photo_voice: "Photo + familiar voice",
   greeting: "TV greeting",
   calm: "Calm screen",
+  note: "Caregiver message",
 };

@@ -2,12 +2,14 @@
 // TV-room greeting (Part 6).
 
 import type { PatientMode, PatientState, RiskEvent, RiskKind, ZoneRule } from "@/lib/types";
+import { cleanNote, closingLine, cueScript, greetingLine } from "@/lib/cues/script";
 import { HttpError, type MonitorModule } from "../module";
 import { createOutcomeLog, summarize } from "./analytics";
 import { createNotifier } from "./notify";
-import { ESCALATION, createResponder, type Redirect } from "./responder";
-import { createRiskEngine, localMinutes, resolves, ruleFor } from "./risk";
+import { ESCALATION, createResponder, type EscalationProfile, type Redirect } from "./responder";
+import { createRiskEngine, isQuiet, localMinutes, resolves, ruleFor } from "./risk";
 import { RokuClient } from "./roku";
+import { createVoiceCaller } from "./vapi";
 
 const TICK_MS = 15_000;
 
@@ -21,24 +23,21 @@ const rules = (householdId: string): ZoneRule[] => [
 ];
 
 const RISK_KINDS: RiskKind[] = ["exit-approach", "night-wandering", "kitchen-night", "long-bathroom-stay", "no-movement"];
-const PATIENT_MODES: PatientMode[] = ["idle", "glow", "photo_voice", "greeting", "calm"];
+const PATIENT_MODES: PatientMode[] = ["idle", "glow", "photo_voice", "greeting", "calm", "note"];
 
-// What the patient screen says for each risk. Voice clips are recorded by the caregiver in the routine editor.
+// The caregiver's recordings (Settings). They play from the second reminder on; the first one says where they are
+// and the way back, which a fixed recording cannot (docs/cues.md).
 const VOICE_SLOT: Partial<Record<RiskKind, string>> = { "kitchen-night": "kitchen", "night-wandering": "bedtime", "exit-approach": "front-door" };
-const MESSAGE: Record<RiskKind, (name: string) => string> = {
-  "kitchen-night": (n) => `It's still night, ${n}. Let's go back to bed.`,
-  "night-wandering": (n) => `It's still night, ${n}. Let's go back to bed.`,
-  "exit-approach": (n) => `You're home, ${n}. Let's go back to your room.`,
-  "long-bathroom-stay": (n) => `${n}, are you all right?`,
-  "no-movement": (n) => `${n}, how about a glass of water in the kitchen?`,
-};
 
 const GREETING_MS = 15_000; // how long the greeting stays before the routine comes back
 const GREET_AGAIN_MS = 10 * 60_000; // walking in and out of the TV room should not greet every time
+const NOTE_MS = 60_000; // how long a caregiver's message stays on the TV
 
-function greetingFor(ts: number, name: string, timeZone: string) {
-  const h = localMinutes(ts, timeZone) / 60;
-  return `${h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"}, ${name}.`;
+// CUE_GRACE_MIN (0 to 15) overrides the grace period of either profile.
+function profileFrom(env: Record<string, string | undefined>, name: "demo" | "real"): EscalationProfile {
+  const min = Number(env.CUE_GRACE_MIN);
+  const grace = env.CUE_GRACE_MIN !== undefined && env.CUE_GRACE_MIN !== "" && min >= 0 && min <= 15 ? { graceS: Math.round(min * 60) } : {};
+  return { ...ESCALATION[name], ...grace };
 }
 
 const field = (body: unknown, key: string): unknown => (body && typeof body === "object" ? (body as Record<string, unknown>)[key] : undefined);
@@ -51,8 +50,11 @@ const actions: MonitorModule = {
     const zoneRules = rules(householdId);
     const room = (id: string) => ctx.world().rooms.find((r) => r.id === id);
     const profileName = process.env.ESCALATION_PROFILE === "real" ? "real" : "demo";
+    const profile = profileFrom(process.env, profileName);
     const notify = createNotifier(process.env, ctx.log);
+    const voice = createVoiceCaller(process.env, ctx.log);
     const roku = new RokuClient(process.env.ROKU_HOST || undefined, ctx.log);
+    const night = () => isQuiet(Date.now(), HOUSEHOLD);
 
     // Deferred so a risk the engine raises reaches every listener before the responder's follow-up does.
     const later = <T>(fn: (x: T) => void) => (x: T) => queueMicrotask(() => fn(x));
@@ -72,7 +74,7 @@ const actions: MonitorModule = {
       householdId,
       patientName: HOUSEHOLD.patientName,
       timeZone: HOUSEHOLD.timezone,
-      profile: ESCALATION[profileName],
+      profile,
       contacts: [
         { name: "Primary", phone: process.env.CAREGIVER_PHONE_NUMBER ?? "", priority: 1 },
         { name: "Backup", phone: process.env.BACKUP_PHONE_NUMBER ?? "", priority: 2 },
@@ -83,28 +85,35 @@ const actions: MonitorModule = {
         const kind = room(roomId)?.kind;
         return resolves(risk.kind, kind, ruleFor(zoneRules, kind, ts, HOUSEHOLD.timezone));
       },
-      redirectFor: (risk): Redirect => {
+      // Built from the scan at each reminder, so a person who moved hears the way back from where they are now.
+      redirectFor: (risk, here, cue): Redirect => {
         const slot = VOICE_SLOT[risk.kind];
+        const script = cueScript({ kind: risk.kind, name: HOUSEHOLD.patientName, home: ctx.world(), roomId: here.roomId, confident: here.confident, night: night() });
         return {
-          message: MESSAGE[risk.kind](HOUSEHOLD.patientName),
+          ...script,
           // The caregiver's chosen photo (Settings). /api/patient/media falls back to the scanned bedroom photo.
           photoPath: `${householdId}/redirect-photo.jpg`,
-          voicePath: slot ? `${householdId}/redirect-${slot}.m4a` : undefined,
+          voicePath: slot && cue >= 2 ? `${householdId}/redirect-${slot}.m4a` : undefined,
         };
       },
+      closingFor: () => closingLine(HOUSEHOLD.patientName, night()),
       emitRisk: later((risk: RiskEvent) => ctx.bus.emit("risk", risk)),
       emitPatient: later((state) => ctx.bus.emit("patient", state)),
       notify,
+      voice,
       log: ctx.log,
     });
-    ctx.log("actions", `escalation profile ${profileName}; twilio ${notify.live ? "live" : "dry run"}; roku ${roku.configured ? "on" : "dry run"}`);
+    ctx.log(
+      "actions",
+      `escalation profile ${profileName} (grace ${profile.graceS} s); twilio ${notify.live ? "live" : "dry run"}; vapi ${voice.live ? "live" : "off"}; roku ${roku.configured ? "on" : "dry run"}`,
+    );
 
     // A replay (/replay/start) re-emits a recorded night for the screens only: no new risks, texts or calls.
     const live = <T>(fn: (e: T) => void) => (e: T) => {
       if (!ctx.store.replaying) fn(e);
     };
     ctx.bus.on("location", live(engine.onLocation));
-    ctx.bus.on("location", live((e) => responder.onLocation(e.roomId, Date.parse(e.ts) || Date.now())));
+    ctx.bus.on("location", live((e) => responder.onLocation(e.roomId, Date.parse(e.ts) || Date.now(), e.confidence)));
     ctx.bus.on("prediction", live(engine.onPrediction));
     ctx.bus.on("risk", live(engine.track));
     ctx.bus.on("risk", live(responder.onRisk));
@@ -131,7 +140,7 @@ const actions: MonitorModule = {
       const greeting: PatientState = {
         householdId,
         mode: "greeting",
-        message: greetingFor(ts, HOUSEHOLD.patientName, HOUSEHOLD.timezone),
+        message: greetingLine(HOUSEHOLD.patientName, localMinutes(ts, HOUSEHOLD.timezone) / 60),
         voicePath: `${householdId}/greeting.m4a`,
         updatedAt: new Date().toISOString(),
       };
@@ -153,6 +162,31 @@ const actions: MonitorModule = {
     ctx.http.post("/ack/:alertId", ({ params }) => {
       if (!responder.ack(params.alertId)) throw new HttpError(404, "unknown alert");
       return { acknowledged: true };
+    });
+
+    // The companion voice heard a call for help (or a caregiver pressed the button): tell the family now.
+    ctx.http.post("/help", ({ body }) => {
+      const riskEventId = optionalString(field(body, "riskEventId"));
+      if (!responder.escalateNow(riskEventId)) throw new HttpError(409, "no response is running");
+      ctx.log("actions", "help asked:", optionalString(field(body, "reason"))?.slice(0, 80) ?? "");
+      return { escalated: true };
+    });
+
+    // A message the caregiver typed on the dashboard: shown and said on the TV, then the routine comes back.
+    // A running redirect keeps the screen; the message would talk over it.
+    let noteAt = 0;
+    ctx.http.post("/patient/say", ({ body }) => {
+      const text = cleanNote(field(body, "text"));
+      if (!text) throw new HttpError(400, "text required");
+      if (responder.state().active.some((r) => r.state !== "detected")) throw new HttpError(409, "a reminder is playing; try again in a moment");
+      const at = (noteAt = Date.now());
+      const note: PatientState = { householdId, mode: "note", message: text, roomId: ctx.store.room, updatedAt: new Date(at).toISOString() };
+      ctx.bus.emit("patient", note);
+      ctx.log("actions", `caregiver message (${text.length} chars)`); // the text itself stays off the log
+      setTimeout(() => {
+        if (noteAt === at && ctx.store.patient === "note") ctx.bus.emit("patient", { householdId, mode: "idle", updatedAt: new Date().toISOString() });
+      }, NOTE_MS).unref();
+      return { shown: true, text };
     });
 
     ctx.http.get("/debug/state", () => {

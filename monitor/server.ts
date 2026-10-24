@@ -60,11 +60,14 @@ function toLive<K extends BusEvent>(event: K, p: BusEvents[K]): LiveFrame | unde
     }
     case "risk": {
       const e = p as BusEvents["risk"];
-      return { t: "risk", ts: now, riskEventId: e.id, kind: e.kind, roomId: e.roomId, state: e.state, trigger: e.trigger };
+      return { t: "risk", ts: now, riskEventId: e.id, kind: e.kind, roomId: e.roomId, state: e.state, trigger: e.trigger, graceUntil: e.graceUntil, cues: e.cues };
     }
     case "patient": {
       const e = p as BusEvents["patient"];
-      return { t: "patient", ts: Date.parse(e.updatedAt) || now, mode: e.mode, message: e.message, photoPath: e.photoPath, voicePath: e.voicePath, riskEventId: e.riskEventId };
+      return {
+        t: "patient", ts: Date.parse(e.updatedAt) || now, mode: e.mode, message: e.message, photoPath: e.photoPath, voicePath: e.voicePath,
+        riskEventId: e.riskEventId, detail: e.detail, route: e.route, cue: e.cue, roomId: e.roomId,
+      };
     }
   }
 }

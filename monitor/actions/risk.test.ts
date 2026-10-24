@@ -62,6 +62,17 @@ test("kitchen at 3 AM raises kitchen-night", () => {
   assert.deepEqual(s.risks.map((r) => [r.kind, r.roomId, r.state, r.trigger]), [["kitchen-night", "kitchen", "detected", "detected"]]);
 });
 
+test("a risk carries when they left the bedroom, for the grace period", () => {
+  const s = setup("03:00");
+  s.enter("bedroom");
+  s.advance(2 * MIN);
+  s.enter("hallway");
+  const leftBed = s.now();
+  s.advance(MIN);
+  s.enter("kitchen");
+  assert.equal(s.risks[0].upSince, new Date(leftBed).toISOString());
+});
+
 test("kitchen at noon raises nothing", () => {
   const s = setup("12:00");
   s.enter("kitchen");
@@ -188,7 +199,9 @@ test("through the monitor: /debug/emit of a 3 AM kitchen location puts a risk on
       body: JSON.stringify({ event: "location", payload }),
     });
     assert.equal(res.status, 200);
-    assert.deepEqual(risks.filter((r) => r.state === "detected").map((r) => [r.kind, r.roomId, r.source]), [["kitchen-night", "kitchen", "sim"]]);
+    // First event per risk: the responder follows up on the same id (its grace period) before any cue.
+    const raised = risks.filter((r, i) => risks.findIndex((x) => x.id === r.id) === i);
+    assert.deepEqual(raised.map((r) => [r.kind, r.roomId, r.state, r.source]), [["kitchen-night", "kitchen", "detected", "sim"]]);
   } finally {
     await monitor.close();
   }

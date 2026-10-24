@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { HomeModel } from "@/lib/types";
-import { closingLine, cueScript, greetingLine, inSentence, routinePrompt } from "./script";
+import { cleanNote, closingLine, cueScript, greetingLine, inSentence, routinePrompt } from "./script";
 
 // Fixture rooms: bedroom, bathroom, kitchen, tv-room and front-door, each one door off the hallway.
 const home = JSON.parse(readFileSync("fixtures/home-model.json", "utf8")) as HomeModel;
@@ -62,4 +62,15 @@ test("closing line and routine prompts", () => {
   assert.equal(routinePrompt("Rosa", "Goodnight, Rosa. Time to sleep."), "Rosa, goodnight. Time to sleep.");
   assert.equal(routinePrompt("Rosa", "Rosa, lunch is ready."), "Rosa, lunch is ready.");
   assert.equal(routinePrompt("Rosa", "TV time."), "Rosa, TV time.");
+});
+
+test("routine prompts keep I and acronyms capitalized", () => {
+  assert.equal(routinePrompt("Rosa", "I'll be there at 9."), "Rosa, I'll be there at 9.");
+});
+
+test("a typed note is one clean line, capped in length", () => {
+  assert.equal(cleanNote("  Maria is coming\n at  9. "), "Maria is coming at 9.");
+  assert.equal(cleanNote("   "), undefined);
+  assert.equal(cleanNote(42), undefined);
+  assert.equal(cleanNote("x".repeat(500))?.length, 200);
 });

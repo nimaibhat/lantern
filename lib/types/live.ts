@@ -10,7 +10,7 @@ export type LiveFrame =
   | { t: "position"; ts: number; x: number; y: number; roomId: string; confidence: number; source: LocationSource; velocity?: Vec2 }
   | { t: "location"; ts: number; roomId: string; prevRoomId?: string; source: LocationSource }
   | { t: "prediction"; ts: number; fromRoomId: string; nextRoomId: string; probability: number }
-  | { t: "risk"; ts: number; riskEventId: string; kind: RiskKind; roomId: string; state: RiskState; trigger: RiskTrigger }
+  | { t: "risk"; ts: number; riskEventId: string; kind: RiskKind; roomId: string; state: RiskState; trigger: RiskTrigger; graceUntil?: string; cues?: number }
   // message, photoPath and voicePath let the TV page (/routine) show and say the redirect without Supabase
-  | { t: "patient"; ts: number; mode: PatientMode; message?: string; photoPath?: string; voicePath?: string; riskEventId?: string }
+  | { t: "patient"; ts: number; mode: PatientMode; message?: string; photoPath?: string; voicePath?: string; riskEventId?: string; detail?: string; route?: string[]; cue?: number; roomId?: string }
   | { t: "listener"; ts: number; receiverId: string; online: boolean; rssi?: number };
