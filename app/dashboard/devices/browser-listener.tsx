@@ -120,11 +120,23 @@ export function BrowserListener() {
   const hubHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
   if (!supported) {
+    // Safari (macOS default) and Firefox do not support Web Bluetooth.
+    const isSafari = typeof navigator !== "undefined" && /safari/i.test(navigator.userAgent) && !/chrome|chromium/i.test(navigator.userAgent);
     return (
       <section className="card" style={{ marginBottom: "1.5rem" }}>
         <h2>Pair This Laptop</h2>
         <p style={{ color: "var(--red, #ef4444)" }}>
-          This browser does not support Bluetooth. Open this page in <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.
+          {isSafari
+            ? "Safari does not support Bluetooth scanning."
+            : "This browser does not support Bluetooth scanning."}
+          {" "}Open this same page in <strong>Google Chrome</strong>{" "}
+          {process.platform !== "darwin" && <>or <strong>Microsoft Edge</strong></>}.
+        </p>
+        <p className="muted" style={{ fontSize: "0.85rem", marginTop: 8 }}>
+          Copy this URL and paste it into Chrome:
+        </p>
+        <p style={{ fontFamily: "monospace", margin: "0.25rem 0", padding: "0.5rem", background: "var(--d-border, #e5e5e5)", borderRadius: 4, wordBreak: "break-all", fontSize: "0.85rem", userSelect: "all" }}>
+          {typeof window !== "undefined" ? window.location.href : ""}
         </p>
       </section>
     );
@@ -134,12 +146,13 @@ export function BrowserListener() {
     return (
       <section className="card" style={{ marginBottom: "1.5rem" }}>
         <h2>Pair This Laptop</h2>
-        <p>Bluetooth requires HTTPS. Open this page at:</p>
-        <p style={{ fontFamily: "monospace", margin: "0.5rem 0", padding: "0.5rem", background: "var(--d-border, #e5e5e5)", borderRadius: 4, wordBreak: "break-all" }}>
+        <p>Bluetooth requires a secure connection. Open this page at:</p>
+        <p style={{ fontFamily: "monospace", margin: "0.5rem 0", padding: "0.5rem", background: "var(--d-border, #e5e5e5)", borderRadius: 4, wordBreak: "break-all", fontSize: "0.85rem", userSelect: "all" }}>
           https://{hubHost}:3000/dashboard/devices
         </p>
         <p className="muted" style={{ fontSize: "0.82rem" }}>
-          On the hub laptop, start with: <code style={{ padding: "2px 6px", background: "var(--d-border, #e5e5e5)", borderRadius: 3 }}>npm run dev:https</code>
+          On the hub laptop, start with: <code style={{ padding: "2px 6px", background: "var(--d-border, #e5e5e5)", borderRadius: 3 }}>npm run dev:https</code>{" "}
+          then click &quot;Advanced&quot; and &quot;Proceed&quot; when Chrome shows the certificate warning.
         </p>
       </section>
     );

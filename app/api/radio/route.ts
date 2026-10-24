@@ -29,8 +29,10 @@ function stop(p: ChildProcess | null) {
   }
 }
 
+const PYTHON = process.platform === "win32" ? "py" : "python3";
+
 function start(args: string[]) {
-  return spawn("py", ["-u", ...args], {
+  return spawn(PYTHON, ["-u", ...args], {
     cwd: process.cwd(),
     windowsHide: true,
     stdio: "ignore",

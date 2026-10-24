@@ -67,13 +67,15 @@ function requestFromHub(request: Request): boolean {
   return name === "localhost" || name === "127.0.0.1" || name === "::1";
 }
 
+const PYTHON = process.platform === "win32" ? "py" : "python3";
+
 function startEar(deviceId: string, postUrl: string): Promise<boolean> {
   stopEar();
   return new Promise((resolve) => {
     let proc: ChildProcess;
     try {
       proc = spawn(
-        "py",
+        PYTHON,
         ["-u", "listener/listener.py", "--id", deviceId, "--post", postUrl, "--min-interval", "0.8"],
         { cwd: process.cwd(), windowsHide: true, stdio: "ignore" },
       );
@@ -206,7 +208,12 @@ function scannerPids(): Promise<{ pid: number; id: string | null }[]> {
 
 function killPid(pid: number): Promise<void> {
   return new Promise((resolve) => {
-    execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, () => resolve());
+    if (process.platform === "win32") {
+      execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, () => resolve());
+    } else {
+      try { process.kill(pid, "SIGTERM"); } catch { /* already gone */ }
+      resolve();
+    }
   });
 }
 

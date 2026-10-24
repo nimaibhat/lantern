@@ -207,6 +207,7 @@ export default function DevicesPage() {
   return (
     <div style={{ padding: "1rem", maxWidth: 900 }}>
       <h1>Devices</h1>
+      <BrowserListener />
       <RadioControl />
 
       {/* Connection status */}
@@ -354,8 +355,6 @@ export default function DevicesPage() {
           </table>
         )}
       </section>
-
-      <BrowserListener />
 
       <Calibration rooms={rooms} />
 
