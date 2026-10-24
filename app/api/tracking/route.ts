@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import os from "os";
@@ -5,6 +6,14 @@ import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
 
 // Caregiver placement and the live trail: which device is in which room,
 // the latest dBm, and a line each time the phone's room changes.
+
+function agentLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
+  // #region agent log
+  const line = JSON.stringify({ sessionId: "aae308", hypothesisId, location, message, data, timestamp: Date.now() }) + "\n";
+  try { appendFileSync("debug-aae308.log", line); } catch { /* ingest copy still records it */ }
+  fetch("http://127.0.0.1:7903/ingest/78803543-27d2-4cbb-972a-636f029ea059", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "aae308" }, body: JSON.stringify({ sessionId: "aae308", hypothesisId, location, message, data, timestamp: Date.now() }) }).catch(() => {});
+  // #endregion
+}
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,40}$/i;
 const HEAR_FRESH_MS = 5000;
@@ -146,6 +155,12 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object") return Response.json({ error: "Bad request." }, { status: 400 });
 
   if (!db) return Response.json({ error: "Supabase is not configured." }, { status: 503 });
+  if (body.action === "view") {
+    // #region agent log
+    agentLog("A", "route.ts:view", "page view", { error: typeof body.error === "string" ? body.error.slice(0, 180) : "", protocol: body.protocol === "https:" || body.protocol === "http:" ? body.protocol : "" });
+    // #endregion
+    return Response.json({ ok: true });
+  }
   if (body.action === "join") return join(body);
   if (body.action === "hear") return hear(body);
   if (body.action === "place") return place(body);
@@ -205,8 +220,12 @@ async function listenHere(receiverId: string, replace: boolean): Promise<boolean
   const running = earProc();
   if (running.id === receiverId && running.proc && running.proc.exitCode == null) return true;
   const scanners = await scannerPids();
+  // #region agent log
+  agentLog("B", "route.ts:listenHere", "scanner check", { receiverId, replace, scanners: scanners.map((row) => row.id) });
+  // #endregion
   if (scanners.some((row) => row.id === receiverId)) return true;
-  if (!replace && scanners.length > 0) return true;
+  // A different laptop already owns this radio. Do not report this name as listening.
+  if (!replace && scanners.length > 0) return false;
   for (const row of scanners) await killPid(row.pid);
   if (running.proc?.pid) await killPid(running.proc.pid);
   return startEar(receiverId);
@@ -249,15 +268,32 @@ async function hear(body: { deviceId?: string; rssi?: number }) {
   const deviceId = (body.deviceId ?? "").trim();
   const rssi = body.rssi;
   if (!SLUG.test(deviceId) || typeof rssi !== "number" || !Number.isFinite(rssi) || rssi <= -100 || rssi > 20) {
+    // #region agent log
+    agentLog("D", "route.ts:hear", "hear rejected", { deviceId, rssiType: typeof rssi });
+    // #endregion
     return Response.json({ error: "Unknown device." }, { status: 400 });
   }
 
   const { data } = await db!.from("receivers").select("id").eq("id", deviceId).eq("household_id", HOUSEHOLD_ID).maybeSingle();
-  if (!data) return Response.json({ error: "Unknown device." }, { status: 404 });
+  if (!data) {
+    // #region agent log
+    agentLog("D", "route.ts:hear", "hear unknown laptop", { deviceId });
+    // #endregion
+    return Response.json({ error: "Unknown device." }, { status: 404 });
+  }
 
   const now = Date.now();
   const rounded = Math.round(rssi);
   slot().ears.set(deviceId, { rssi: rounded, at: now });
+  // #region agent log
+  const heardLog = (globalThis as typeof globalThis & { __lanternHeardLog?: Map<string, number> }).__lanternHeardLog ?? new Map<string, number>();
+  (globalThis as typeof globalThis & { __lanternHeardLog?: Map<string, number> }).__lanternHeardLog = heardLog;
+  const prevLog = heardLog.get(deviceId) ?? 0;
+  if (now - prevLog > 10000) {
+    heardLog.set(deviceId, now);
+    agentLog("C", "route.ts:hear", "signal saved", { deviceId, rssi: rounded });
+  }
+  // #endregion
   const last = slot().seenWrite.get(deviceId) ?? 0;
   if (now - last >= 1000) {
     slot().seenWrite.set(deviceId, now);

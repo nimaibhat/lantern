@@ -8,13 +8,22 @@ import type { Receiver } from "@/lib/types";
 const WS_URL = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const SERVICE = "4c414e54-4552-4e00-a000-000000000001";
 
-type AdEvent = Event & { rssi?: number };
+type AdEvent = Event & { rssi?: number; name?: string; uuids?: string[]; device?: { name?: string } };
 type BleDevice = {
+  name?: string;
   watchAdvertisements?: () => Promise<void>;
   addEventListener: (type: "advertisementreceived", listener: (event: AdEvent) => void) => void;
 };
+type ScanOptions = {
+  filters?: Array<{ namePrefix?: string; services?: string[] }>;
+  acceptAllAdvertisements?: boolean;
+  keepRepeatedDevices?: boolean;
+};
 type Ble = {
   requestDevice: (options: { filters: Array<{ name?: string; namePrefix?: string; services?: string[] }> }) => Promise<BleDevice>;
+  requestLEScan?: (options: ScanOptions) => Promise<unknown>;
+  getDevices?: () => Promise<BleDevice[]>;
+  addEventListener?: (type: "advertisementreceived", listener: (event: AdEvent) => void) => void;
 };
 
 function bluetooth(): Ble | null {
@@ -25,9 +34,17 @@ function bluetooth(): Ble | null {
 function browserCanWatch(): boolean {
   if (!window.isSecureContext) return false;
   const bt = bluetooth();
-  if (!bt?.requestDevice) return false;
+  if (!bt) return false;
+  if (typeof bt.requestLEScan === "function") return true;
+  if (!bt.requestDevice) return false;
   const proto = (globalThis as { BluetoothDevice?: { prototype?: { watchAdvertisements?: unknown } } }).BluetoothDevice?.prototype;
   return typeof proto?.watchAdvertisements === "function";
+}
+
+function adMatches(event: AdEvent): boolean {
+  const name = `${event.name ?? ""} ${event.device?.name ?? ""}`.toLowerCase();
+  const uuids = (event.uuids ?? []).map((id) => id.toLowerCase());
+  return name.includes("lantern") || uuids.includes(SERVICE);
 }
 
 async function onHub(): Promise<boolean> {
@@ -87,6 +104,26 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       setDraft(name);
       watchingRef.current = true;
       setWatching(true);
+    }
+    const bt = bluetooth();
+    if (saved && bt?.getDevices) {
+      bt.getDevices().then((devices) => {
+        for (const device of devices) {
+          if (typeof device.watchAdvertisements !== "function") continue;
+          device.addEventListener("advertisementreceived", (event) => {
+            if (typeof event.rssi !== "number") return;
+            latest.current = { rssi: event.rssi, at: Date.now() };
+            const id = deviceIdRef.current;
+            if (!id) return;
+            fetch("/api/tracking", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "hear", deviceId: id, rssi: event.rssi }),
+            }).catch(() => {});
+          });
+          device.watchAdvertisements?.().catch(() => {});
+        }
+      }).catch(() => {});
     }
     onHub().then((here) => {
       setHub(here);
@@ -248,28 +285,81 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setLabels((prev) => ({ ...prev, [data.deviceId]: label }));
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
-    if (listen && data.listening === false) setNote("Turn Bluetooth on for this computer.");
+    if (listen && data.listening === true) setNote("This computer is looking for the phone. Leave this page open.");
+    if (listen && data.listening === false) setNote("This computer is already scanning as another laptop. Pair on the other computer.");
     return true;
   }
 
-  // Chrome on a Mac can hear the iPhone from this page. A downloaded script cannot run there.
+  function takeRssi(rssi: number) {
+    latest.current = { rssi, at: Date.now() };
+    const id = deviceIdRef.current;
+    if (!id) return;
+    remember(id, rssi);
+    fetch("/api/tracking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "hear", deviceId: id, rssi }),
+    }).catch(() => {});
+  }
+
+  function onAd(event: AdEvent, strict: boolean) {
+    const rssi = event.rssi;
+    const matched = !strict || adMatches(event);
+    // #region agent log
+    fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `ad rssi ${typeof rssi === "number" ? rssi : "none"} id ${deviceIdRef.current ? "set" : "missing"} match ${matched}`, protocol: location.protocol }) }).catch(() => {});
+    // #endregion
+    if (typeof rssi !== "number" || !matched) return;
+    takeRssi(rssi);
+  }
+
+  async function watchDevice(device: BleDevice): Promise<boolean> {
+    if (typeof device.watchAdvertisements !== "function") return false;
+    device.addEventListener("advertisementreceived", (event) => onAd(event, false));
+    await device.watchAdvertisements();
+    return true;
+  }
+
+  // Each laptop scans with its own radio. The reading is posted to the hub, which stores it for every screen.
   async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
-    if (!browserCanWatch()) return "unavailable";
+    const bt = bluetooth();
+    if (!browserCanWatch() || !bt) return "unavailable";
     try {
-      const device = await bluetooth()!.requestDevice({
+      if (typeof bt.requestLEScan === "function" && bt.addEventListener) {
+        try {
+          await bt.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
+        } catch (scanErr) {
+          const scanName = scanErr instanceof DOMException ? scanErr.name : "";
+          if (scanName === "NotFoundError" || scanName === "AbortError") return "cancelled";
+          await bt.requestLEScan({
+            filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
+            keepRepeatedDevices: true,
+          });
+        }
+        bt.addEventListener("advertisementreceived", (event) => onAd(event, true));
+        return "watching";
+      }
+      const device = await bt.requestDevice({
         filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
       });
-      device.addEventListener("advertisementreceived", (event) => {
-        if (typeof event.rssi !== "number") return;
-        latest.current = { rssi: event.rssi, at: Date.now() };
-        const id = deviceIdRef.current;
-        if (id) remember(id, event.rssi);
-      });
-      await device.watchAdvertisements?.();
-      return "watching";
+      bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
+      return (await watchDevice(device)) ? "watching" : "unavailable";
     } catch (err) {
       const picked = err instanceof DOMException ? err.name : "";
+      // #region agent log
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `scan-fail ${picked || "error"}`, protocol: location.protocol }) }).catch(() => {});
+      // #endregion
       if (picked === "NotFoundError" || picked === "AbortError") return "cancelled";
+      if (picked === "NotSupportedError" && bt.requestDevice) {
+        try {
+          const device = await bt.requestDevice({
+            filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
+          });
+          return (await watchDevice(device)) ? "watching" : "unavailable";
+        } catch (again) {
+          const name = again instanceof DOMException ? again.name : "";
+          if (name === "NotFoundError" || name === "AbortError") return "cancelled";
+        }
+      }
       return "unavailable";
     }
   }
@@ -284,14 +374,21 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setBusy(true);
     if (existingId) deviceIdRef.current = existingId;
     try {
+      const bt = bluetooth();
+      // #region agent log
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start mac ${/Mac/i.test(navigator.userAgent)} win ${/Win/i.test(navigator.userAgent)} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
+      // #endregion
       const watched = await listenInPage();
+      // #region agent log
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
+      // #endregion
       if (watched === "cancelled") {
         setNote("Pick LanternTag in the list.");
         return;
       }
       if (watched === "watching") {
         const saved = await saveLaptop(trimmed, false, false);
-        if (saved) setNote("This laptop is listening. Leave this page open.");
+        if (saved) setNote("Looking for the phone on this laptop. Leave this page open.");
         return;
       }
       const saved = await saveLaptop(trimmed, false, false);
@@ -304,8 +401,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       const here = await onHub();
       setHub(here);
       if (here) {
-        await saveLaptop(trimmed, true, true, true);
-        setNote("This laptop is listening.");
+        await saveLaptop(trimmed, true, true, false);
         return;
       }
       if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
