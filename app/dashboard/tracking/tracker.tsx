@@ -419,7 +419,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
         return;
       }
-      // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
+      // Mac and Windows Chrome can both hear the phone via Web Bluetooth (watchAdvertisements).
       if (kind === "mac") {
         if (!window.isSecureContext) {
           setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
@@ -454,6 +454,20 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         if (saved) setNote("This laptop is listening. Leave this page open.");
         return;
       }
+      // Non-hub Windows: try Web Bluetooth first (Chrome 87+ supports watchAdvertisements)
+      if (browserCanWatch() && window.isSecureContext) {
+        const watched = await listenInPage();
+        if (watched === "cancelled") {
+          setNote("Pick LanternTag in the list. Make sure LightBlue is running on the phone with LanternTag advertising.");
+          return;
+        }
+        if (watched === "watching") {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
+          return;
+        }
+      }
+      // Fallback: try local agent, then launcher
       const saved = await saveLaptop(trimmed, false, false);
       const id = deviceIdRef.current;
       if (!saved || !id) return;
@@ -461,8 +475,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This laptop is listening. Leave this page open.");
         return;
       }
-      setLaunchId(id);
-      setNote("Open the Lantern file. Leave its window open until this laptop shows a dBm reading.");
+      if (!window.isSecureContext) {
+        setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
+      } else {
+        setNote("Chrome could not start Bluetooth scanning. Make sure Bluetooth is on and try again.");
+      }
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {
