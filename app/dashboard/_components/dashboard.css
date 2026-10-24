@@ -823,16 +823,24 @@ body:has(.dash.night) {
 }
 
 .player-photo {
-  width: min(560px, 100%);
+  width: min(560px, 100%, 56vh); /* 4:3, so at most 42vh tall: the buttons stay on screen */
   aspect-ratio: 4 / 3;
   border-radius: 24px;
   font-size: 1.2rem;
 }
 
+.player-photo.has-photo { object-fit: cover; }
+
 .player-title {
   max-width: 18ch;
   font-size: clamp(2rem, 5vw, 3.4rem) !important;
   line-height: 1.15;
+}
+
+.player-next {
+  max-width: 30ch;
+  font-size: 1.3rem;
+  color: var(--d-muted);
 }
 
 .player-controls {
