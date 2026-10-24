@@ -38,7 +38,7 @@ speaks.
   kitchen and the call 45 s later. Say "yes, I'll go check": the dashboard shows the call acknowledged and the backup
   is never texted. Say "I can't": the backup is texted at once.
 - **Companion**: same walk with `/routine?preview=1` open. The first reminder is the scripted voice; from the second
-  the companion talks. Answer it. Walk to the bedroom in the simulator and it says "Rosa, good night. Sleep well." and
+  the companion talks. Answer it. Walk to the bedroom in the simulator and it says "Patient, good night. Sleep well." and
   hangs up. Say "I fell": the monitor logs `help asked` and texts the family immediately.
 
 ## How it fits together

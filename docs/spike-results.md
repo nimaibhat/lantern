@@ -40,7 +40,7 @@ Replace all fake/mock data paths with live monitor WebSocket data and confirm th
 - Started `npm run dev:monitor` and `npm run dev` (Next.js).
 - Mock RSSI simulator (`npm run dev:mock-rssi`) connects 4 virtual listeners and walks a fake tag.
 - **Devices page**: Shows all 4 receivers with live RSSI values, signal bars, Online status, anchor assignment. Nearest listener highlighted. Source badge shows "ble". Room updates as tag walks.
-- **Overview page**: Floor plan highlights the correct room. "Rosa is in the [Room]" updates in real-time. Receiver count shows 4/3 online (from monitor). No more fake browser-only room walk.
+- **Overview page**: Floor plan highlights the correct room. "Patient is in the [Room]" updates in real-time. Receiver count shows 4/3 online (from monitor). No more fake browser-only room walk.
 - **Assign UI**: Can add/remove listeners. Changes persist to `home-model.json`.
 
 ### Real BLE (LightBlue)

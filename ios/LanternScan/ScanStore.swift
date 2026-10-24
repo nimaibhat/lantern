@@ -36,7 +36,7 @@ final class ScanStore: ObservableObject {
         #if DEBUG
         // Launch with -LanternPreview to see the home screen with sample rooms (Simulator screenshots).
         if ProcessInfo.processInfo.arguments.contains("-LanternPreview") {
-            householdName = "The Alvarez home"
+            householdName = "Demo home"
             rooms = [("Bedroom", 3), ("Hallway", 2), ("Kitchen", 4)].map {
                 ScannedRoom(name: $0.0, captured: nil, json: Data(), usdz: nil, photos: Array(repeating: Data(), count: $0.1))
             }

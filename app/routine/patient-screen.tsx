@@ -37,7 +37,7 @@ const fromFrame = (f: Omit<Shown, "at">): Shown => ({
   cue: f.cue, roomId: f.roomId, riskEventId: f.riskEventId, at: Date.now(),
 });
 
-// Name first, every time: "Rosa, Maria is coming at 9."
+// Name first, every time: "Patient, your caregiver is coming at 9."
 const named = (name: string, text = "") => (text.toLowerCase().startsWith(name.toLowerCase()) ? text : `${name}, ${text}`);
 
 export function PatientScreen({ steps, rooms, householdId, name, quiet, preview, room }: {

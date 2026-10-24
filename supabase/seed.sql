@@ -4,10 +4,10 @@
 delete from households where id = 'h1';
 
 insert into households (id, name, patient_name, quiet_hours_start, quiet_hours_end) values
-  ('h1', 'The Alvarez home', 'Rosa', '21:00', '07:00');
+  ('h1', 'Demo home', 'Patient', '21:00', '07:00');
 insert into contacts (id, household_id, name, relation, phone, priority) values
-  ('c1', 'h1', 'Maria Alvarez', 'Daughter', '+1 (614) 555-0142', 1),
-  ('c2', 'h1', 'Luis Alvarez', 'Son', '+1 (614) 555-0178', 2);
+  ('c1', 'h1', 'Caregiver', 'Family', '+1 (614) 555-0142', 1),
+  ('c2', 'h1', 'Backup caregiver', 'Family', '+1 (614) 555-0178', 2);
 insert into rooms (id, household_id, name, outline, doors, windows, objects) values
   ('bedroom', 'h1', 'Bedroom', '[{"x":0,"y":0},{"x":180,"y":0},{"x":180,"y":170},{"x":0,"y":170}]'::jsonb, '[{"id":"d1","kind":"door","start":{"x":60,"y":170},"end":{"x":92,"y":170},"heightIn":80,"widthIn":32}]'::jsonb, '[]'::jsonb, '[{"id":"o1","category":"bed","center":{"x":90,"y":70},"widthIn":60,"depthIn":80,"heightIn":30,"rotationDeg":0}]'::jsonb),
   ('bathroom', 'h1', 'Bathroom', '[{"x":180,"y":0},{"x":290,"y":0},{"x":290,"y":170},{"x":180,"y":170}]'::jsonb, '[{"id":"d2","kind":"door","start":{"x":210,"y":170},"end":{"x":238,"y":170},"heightIn":80,"widthIn":28}]'::jsonb, '[]'::jsonb, '[{"id":"o2","category":"toilet","center":{"x":270,"y":30},"widthIn":18,"depthIn":28,"heightIn":30,"rotationDeg":0},{"id":"o3","category":"bathtub","center":{"x":235,"y":25},"widthIn":60,"depthIn":30,"heightIn":30,"rotationDeg":0}]'::jsonb),
@@ -33,19 +33,19 @@ insert into audit_items (id, household_id, room_id, source, code, title, detail,
 insert into routines (id, household_id, name) values
   ('rt1', 'h1', 'Daily routine');
 insert into routine_steps (id, household_id, routine_id, time, title, room_id) values
-  ('p1', 'h1', 'rt1', '07:00', 'Good morning, Rosa. Time to get up.', 'bedroom'),
+  ('p1', 'h1', 'rt1', '07:00', 'Good morning. Time to get up.', 'bedroom'),
   ('p2', 'h1', 'rt1', '07:15', 'Wash your face and brush your teeth.', 'bathroom'),
   ('p3', 'h1', 'rt1', '07:45', 'Breakfast is in the kitchen.', 'kitchen'),
   ('p4', 'h1', 'rt1', '10:00', 'Sit in the living room and listen to music.', 'living'),
   ('p5', 'h1', 'rt1', '12:30', 'Lunch time.', 'kitchen'),
   ('p6', 'h1', 'rt1', '15:00', 'Afternoon rest.', 'bedroom'),
   ('p7', 'h1', 'rt1', '21:00', 'Get ready for bed.', 'bathroom'),
-  ('p8', 'h1', 'rt1', '21:30', 'Goodnight, Rosa. Time to sleep.', 'bedroom');
+  ('p8', 'h1', 'rt1', '21:30', 'Goodnight. Time to sleep.', 'bedroom');
 insert into risk_events (id, household_id, kind, room_id, state, started_at, resolved_at) values
   ('k1', 'h1', 'exit-approach', 'entry', 'resolved', (((now() at time zone 'America/New_York')::date + time '03:07') at time zone 'America/New_York'), (((now() at time zone 'America/New_York')::date + time '03:08') at time zone 'America/New_York'));
 insert into activity (id, household_id, kind, text, ts) values
   ('t1', 'h1', 'move', 'Bedroom → Hallway', (((now() at time zone 'America/New_York')::date + time '03:06') at time zone 'America/New_York')),
-  ('t2', 'h1', 'risk', 'Heading to the front door during quiet hours. Hallway light on, Maria''s voice played.', (((now() at time zone 'America/New_York')::date + time '03:07') at time zone 'America/New_York')),
+  ('t2', 'h1', 'risk', 'Heading to the front door during quiet hours. Hallway light on, the caregiver''s voice played.', (((now() at time zone 'America/New_York')::date + time '03:07') at time zone 'America/New_York')),
   ('t3', 'h1', 'move', 'Hallway → Bedroom', (((now() at time zone 'America/New_York')::date + time '03:08') at time zone 'America/New_York')),
   ('t4', 'h1', 'info', 'Back in bed after 48 s. No alert sent.', (((now() at time zone 'America/New_York')::date + time '03:08') at time zone 'America/New_York')),
   ('t5', 'h1', 'move', 'Bedroom → Bathroom', (((now() at time zone 'America/New_York')::date + time '07:04') at time zone 'America/New_York')),

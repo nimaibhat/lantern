@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { FamilyFacts } from "@/lib/cues/family";
 import { createVoiceCaller } from "./vapi";
 
-const facts: FamilyFacts = { name: "Rosa", kind: "kitchen-night", room: "Kitchen", since: "3:04 AM", reminders: 3 };
+const facts: FamilyFacts = { name: "Patient", kind: "kitchen-night", room: "Kitchen", since: "3:04 AM", reminders: 3 };
 const ENV = { VAPI_API_KEY: "test-key", VAPI_PHONE_NUMBER_ID: "pn1" };
 
 test("off without a key or phone number, or with VAPI_DRY_RUN=1", () => {

@@ -110,7 +110,7 @@
   animation: pt-out 3s ease-in forwards;
 }
 
-/* "Rosa, good night. Sleep well." stays a few seconds before the screen fades. */
+/* "Patient, good night. Sleep well." stays a few seconds before the screen fades. */
 .pt-calm.with-message {
   color: #ebe6de;
   animation: pt-out 2.5s ease-in 3.5s forwards;

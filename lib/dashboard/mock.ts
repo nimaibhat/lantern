@@ -5,8 +5,8 @@ import type { Activity, AuditItem, Contact, Household, Opening, Receiver, RiskEv
 
 export const household: Household = {
   id: "h1",
-  name: "The Alvarez home",
-  patientName: "Rosa",
+  name: "Demo home",
+  patientName: "Patient",
   mobility: "walker",
   quietHoursStart: "21:00",
   quietHoursEnd: "07:00",
@@ -14,8 +14,8 @@ export const household: Household = {
 };
 
 export const contacts: Contact[] = [
-  { id: "c1", name: "Maria Alvarez", relation: "Daughter", phone: "+1 (614) 555-0142", priority: 1 },
-  { id: "c2", name: "Luis Alvarez", relation: "Son", phone: "+1 (614) 555-0178", priority: 2 },
+  { id: "c1", name: "Caregiver", relation: "Family", phone: "+1 (614) 555-0142", priority: 1 },
+  { id: "c2", name: "Backup caregiver", relation: "Family", phone: "+1 (614) 555-0178", priority: 2 },
 ];
 
 const rect = (x: number, y: number, w: number, h: number): Vec2[] => [
@@ -84,7 +84,7 @@ export const receivers: Receiver[] = [
 // Oldest first. The dashboard shows them newest first.
 export const timeline: Activity[] = [
   { id: "t1", time: "03:06", kind: "move", text: "Bedroom → Hallway" },
-  { id: "t2", time: "03:07", kind: "risk", text: "Heading to the front door during quiet hours. Hallway light on, Maria's voice played." },
+  { id: "t2", time: "03:07", kind: "risk", text: "Heading to the front door during quiet hours. Hallway light on, the caregiver's voice played." },
   { id: "t3", time: "03:08", kind: "move", text: "Hallway → Bedroom" },
   { id: "t4", time: "03:08", kind: "info", text: "Back in bed after 48 s. No alert sent." },
   { id: "t5", time: "07:04", kind: "move", text: "Bedroom → Bathroom" },
@@ -142,12 +142,12 @@ export const auditItems: AuditItem[] = [
 ];
 
 export const routineSteps: RoutineStep[] = [
-  { id: "p1", routineId: "rt1", order: 1, time: "07:00", title: "Good morning, Rosa. Time to get up.", roomId: "bedroom" },
+  { id: "p1", routineId: "rt1", order: 1, time: "07:00", title: "Good morning. Time to get up.", roomId: "bedroom" },
   { id: "p2", routineId: "rt1", order: 2, time: "07:15", title: "Wash your face and brush your teeth.", roomId: "bathroom" },
   { id: "p3", routineId: "rt1", order: 3, time: "07:45", title: "Breakfast is in the kitchen.", roomId: "kitchen" },
   { id: "p4", routineId: "rt1", order: 4, time: "10:00", title: "Sit in the living room and listen to music.", roomId: "living" },
   { id: "p5", routineId: "rt1", order: 5, time: "12:30", title: "Lunch time.", roomId: "kitchen" },
   { id: "p6", routineId: "rt1", order: 6, time: "15:00", title: "Afternoon rest.", roomId: "bedroom" },
   { id: "p7", routineId: "rt1", order: 7, time: "21:00", title: "Get ready for bed.", roomId: "bathroom" },
-  { id: "p8", routineId: "rt1", order: 8, time: "21:30", title: "Goodnight, Rosa. Time to sleep.", roomId: "bedroom" },
+  { id: "p8", routineId: "rt1", order: 8, time: "21:30", title: "Goodnight. Time to sleep.", roomId: "bedroom" },
 ];

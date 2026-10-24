@@ -17,7 +17,7 @@ test("dry run (no keys, or TWILIO_DRY_RUN=1) logs instead of sending, and never 
   globalThis.fetch = (() => assert.fail("must not call Twilio")) as typeof fetch;
   const n = createNotifier({ TWILIO_ACCOUNT_SID: "AC1", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+15550000000", TWILIO_DRY_RUN: "1" }, log);
   assert.equal(n.live, false);
-  await n.sms("+16145550142", "Lantern: Rosa is in the kitchen. Call +1 (614) 555-0142 back.");
+  await n.sms("+16145550142", "Lantern: Patient is in the kitchen. Call +1 (614) 555-0142 back.");
   await n.call("+16145550142", "This is Lantern.");
   assert.equal(lines.length, 2);
   for (const l of lines) assert.doesNotMatch(l, /555/);
@@ -68,8 +68,8 @@ test("without Twilio, texts become ntfy pushes and calls urgent ones, each ackno
   const n = createNotifier({ TWILIO_DRY_RUN: "1", NTFY_CAREGIVER_TOPIC: "lantern-abc", NTFY_TOKEN: "tk" }, log);
   assert.equal(n.live, false);
   assert.equal(n.ntfy, true);
-  await n.sms("ntfy:lantern-abc", "Lantern: Rosa is in the kitchen (3:07 AM). Acknowledge: http://192.168.1.5:3000/api/alerts/a1/ack");
-  await n.call("ntfy:lantern-abc", "This is Lantern. Rosa is in the kitchen.", "http://192.168.1.5:3000/api/alerts/a2/ack");
+  await n.sms("ntfy:lantern-abc", "Lantern: Patient is in the kitchen (3:07 AM). Acknowledge: http://192.168.1.5:3000/api/alerts/a1/ack");
+  await n.call("ntfy:lantern-abc", "This is Lantern. Patient is in the kitchen.", "http://192.168.1.5:3000/api/alerts/a2/ack");
   await n.call("ntfy:lantern-abc", "No link this time.");
 
   const button = (id: string) => [{ action: "http", label: "Acknowledge", url: `http://192.168.1.5:3000/api/alerts/${id}/ack`, method: "GET", clear: true }];
@@ -84,7 +84,7 @@ test("without Twilio, texts become ntfy pushes and calls urgent ones, each ackno
   assert.doesNotMatch(sent[1].body.message, /http/);
   assert.equal(sent[2].body.actions, undefined);
 
-  await n.confirm!("ntfy:lantern-abc", "Lantern: got it, thank you. Alerts stopped. Rosa is in the kitchen.");
+  await n.confirm!("ntfy:lantern-abc", "Lantern: got it, thank you. Alerts stopped. Patient is in the kitchen.");
   assert.equal(sent[3].body.title, "Lantern: got it");
   assert.equal(sent[3].body.priority, 3); // quiet: it is good news
   assert.equal(sent[3].body.actions, undefined); // nothing left to acknowledge
@@ -102,9 +102,9 @@ test("with an ack topic, Acknowledge publishes the alert id to ntfy instead of c
   const { log } = logger();
   const n = createNotifier({ TWILIO_DRY_RUN: "1", NTFY_CAREGIVER_TOPIC: "lantern-abc", NTFY_ACK_TOPIC: "lantern-ack-xyz" }, log);
   assert.deepEqual(n.acks, { server: "https://ntfy.sh", topic: "lantern-ack-xyz", token: undefined });
-  await n.sms("ntfy:lantern-abc", "Lantern: Rosa is in the kitchen. Tap when you are on it: http://localhost:3000/api/alerts/4c85-1f3e/ack");
+  await n.sms("ntfy:lantern-abc", "Lantern: Patient is in the kitchen. Tap when you are on it: http://localhost:3000/api/alerts/4c85-1f3e/ack");
   assert.deepEqual(sent[0].actions, [{ action: "http", label: "Acknowledge", url: "https://ntfy.sh/lantern-ack-xyz", method: "POST", body: "ack 4c85-1f3e", clear: true }]);
-  assert.equal(sent[0].message, "Lantern: Rosa is in the kitchen. Tap Acknowledge when you are on it."); // no dead link
+  assert.equal(sent[0].message, "Lantern: Patient is in the kitchen. Tap Acknowledge when you are on it."); // no dead link
   assert.equal(createNotifier({ TWILIO_DRY_RUN: "1", NTFY_ACK_TOPIC: "lantern-ack-xyz" }, log).acks, undefined); // no ntfy contacts, no listener
 });
 
