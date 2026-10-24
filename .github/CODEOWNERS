@@ -1,0 +1,50 @@
+# Who reviews what. Mirrors the ownership table in PROJECT_PLAN.md 2.1.
+# Aarnav: add your GitHub handle to the lines marked (Aarnav) once you have repo access.
+
+# Saran: Bluetooth, devices, monitor host
+/ios/LanternTag/                @SaranKalaiyarasan
+/listener/                      @SaranKalaiyarasan
+/monitor/*.ts                   @SaranKalaiyarasan
+/monitor/sensing/               @SaranKalaiyarasan
+/lib/types/sensing.ts           @SaranKalaiyarasan
+/app/dashboard/devices/         @SaranKalaiyarasan
+/lib/sensing/                   @SaranKalaiyarasan
+/tools/                         @SaranKalaiyarasan
+/.github/                       @SaranKalaiyarasan
+/AGENTS.md                      @SaranKalaiyarasan
+/supabase/migrations/0006_sensing.sql  @SaranKalaiyarasan
+
+# Nimai: world model, 3D view, accessibility audit
+/ios/LanternScan/               @nimaibhat
+/lib/types/world.ts             @nimaibhat
+/lib/world/                     @nimaibhat
+/lib/scan/                      @nimaibhat
+/lib/audit/ada.ts               @nimaibhat
+/monitor/world/                 @nimaibhat
+/app/dashboard/world/           @nimaibhat
+/app/dashboard/audit/           @nimaibhat
+/app/api/scans/                 @nimaibhat
+/fixtures/home-model.json       @nimaibhat
+/supabase/migrations/0007_world.sql  @nimaibhat
+
+# Vineet: ML and AI
+/ml/                            @vineetsista
+/monitor/inference/             @vineetsista
+/lib/types/inference.ts         @vineetsista
+/lib/audit/vision.ts            @vineetsista
+/app/dashboard/models/          @vineetsista
+/supabase/migrations/0008_ml.sql  @vineetsista
+
+# Aarnav: actions, messages, dashboard, core database
+# /monitor/actions/              (Aarnav)
+# /lib/types/actions.ts          (Aarnav)
+# /lib/supabase/                 (Aarnav)
+# /lib/dashboard/                (Aarnav)
+# /app/dashboard/_components/    (Aarnav)
+# /app/routine/                  (Aarnav)
+# /supabase/migrations/0005_core.sql  (Aarnav)
+
+# Shared: all four sign off
+/lib/types/live.ts              @SaranKalaiyarasan @nimaibhat @vineetsista
+/lib/types/bus.ts               @SaranKalaiyarasan @nimaibhat @vineetsista
+/package.json                   @SaranKalaiyarasan @nimaibhat @vineetsista

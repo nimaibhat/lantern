@@ -36,7 +36,6 @@ A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, 
 app/                 Next.js routes (landing page at /, dashboard at /dashboard)
 app/api/             server routes (scan upload, world model, tracking, alerts)
 app/dashboard/       one folder per page; shared shell, nav, overview and styles in _components/
-lib/types/           type contracts split by module (world, sensing, inference, actions, live, bus)
 lib/world/           home model: geometry, RoomPlan parser, builder, live state, useLive
 lib/audit/           accessibility rules, mobility planner, fixes, vision hazards
 lib/dashboard/       dashboard reads (data.ts), server actions, demo fallback data
@@ -46,17 +45,11 @@ lib/analytics/       analytics helpers
 lib/supabase/        server-only Supabase client
 components/world/    3D scene and avatar
 ios/LanternScan/     SwiftUI RoomPlan scan app
-ios/LanternTag/      SwiftUI BLE tag broadcaster app
-listener/            Python BLE listeners (bleak, runs on laptop receivers)
-monitor/             Node service: HTTP + WS server, module host
 monitor/world/       serves the newest home model, routes through doors
 monitor/sensing/     listener ingest, RssiWindow, SensorFrame, simulator
 monitor/inference/   room classifier, door-graph HMM, position, predictor
 monitor/actions/     risk engine, responder, Twilio, TV
-tools/               dev helpers (mock-rssi, replay, check-env, find-roku, calibrate-offsets)
-docs/                runbook, project status, spike notes
 ml/                  RSSI training scripts and saved model
-fixtures/            sample RoomPlan JSON, RSSI CSV, photos, home model
 supabase/            migrations and seed
 public/              static assets (hero video, poster)
 ```
@@ -65,7 +58,6 @@ Create folders as they are needed. Keep this section up to date.
 
 ## Shared contracts
 
-All workstreams agree on the types in `lib/types/` (one file per module, re-exported from `lib/types/index.ts`). Change them only on purpose, and tell the team when you do. Build against fixtures until the real source is ready.
 
 Units: RoomPlan reports meters. Convert to inches only at the edge (audit rules and UI).
 
@@ -73,13 +65,9 @@ Units: RoomPlan reports meters. Convert to inches only at the edge (audit rules 
 
 ```bash
 npm install
-npm run dev            # http://localhost:3000 (Next.js)
-npm run dev:monitor    # http://localhost:8787 (monitor service, tsx watch)
-npm run dev:mock-rssi  # fake 4 listeners walking a tag through rooms
 npm run build          # production build
 npm run typecheck      # web and monitor (tsconfig.json + tsconfig.monitor.json)
 npm test               # node:test via tsx: lib/** and monitor/**
-npm run check-env      # what is configured and what answers (never prints secrets)
 ```
 
 Never run `npm run build` while `npm run dev` is running in the same folder; it corrupts `.next`. If the dev server breaks or memory climbs, stop it and run `rm -rf .next && npm run dev`.

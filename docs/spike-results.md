@@ -1,0 +1,5 @@
+- `app/dashboard/_components/use-monitor-live.ts`: New hook replacing `useMockLive`. Connects to `/ws/live`, receives location/position/risk events, maintains the same API shape.
+- `app/dashboard/_components/overview.tsx`: Switched from `useMockLive` to `useMonitorLive`. Shows "live" / "offline" badge based on WebSocket connection. Receiver count from live data when connected, SSR data as fallback.
+- RSSI window tests: 6/6 pass (now part of `npm test`).
+- `app/dashboard/_components/use-monitor-live.ts` - NEW: real monitor hook
+- `app/dashboard/_components/overview.tsx` - switched to useMonitorLive
