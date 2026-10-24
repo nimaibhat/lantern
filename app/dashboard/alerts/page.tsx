@@ -6,3 +6,4 @@ import "./alerts.css";
 export default async function AlertsPage() {
   const { model } = await getHomeModel();
   return <AlertLog roomNames={Object.fromEntries(model.rooms.map((r) => [r.id, r.name]))} />;
+}

@@ -38,7 +38,11 @@ export default async function AnalyticsPage() {
   const ratio = Number.isFinite(kitchen.ratio) ? `${kitchen.ratio.toFixed(1)}x` : "new";
   const p = household.patientName;
 
+  return (
     <div className="analytics">
+      <div className="page-head">
+        <div>
+          <h1>Analytics</h1>
           <p className="muted">How nights have changed, when each room is used, and how tonight&apos;s responses ended.</p>
         </div>
         <span className="badge sim">Demo data</span>
@@ -161,5 +165,9 @@ export default async function AnalyticsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
         </details>
       </section>
+    </div>
+  );
+}
