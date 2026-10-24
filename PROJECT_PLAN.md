@@ -1,6 +1,8 @@
 # Lantern: Project Plan (one file, four parts)
 
-**Lantern**: dementia home safety built on one scan of the real home. An iPhone "tag" is heard by laptops, the system works out where the person is, shows them moving through a 3D model of the real home, responds first on the TV (glow, familiar photo, familiar voice), and wakes the caregiver only when it matters.
+**Lantern**: dementia home safety built on one scan of the real home. An iPhone "tag" is heard by laptops, the system works out where the person is, shows them moving through a 3D model of the real home, responds first on a patient screen in the room (glow, familiar photo, familiar voice), and wakes the caregiver only when it matters.
+
+**Changed 2026-10-24:** the Roku TV is dropped. The patient screen is the same `/routine` page, run fullscreen on a tablet or laptop in the room (with its own speaker) instead of being cast to a TV. Nothing else about the redirect changes.
 
 This file replaces all earlier plan files. The landing page already exists; **nobody touches `app/page.tsx` or the landing assets**. The landing page's Enter button goes to `/dashboard`.
 
@@ -22,7 +24,7 @@ This file replaces all earlier plan files. The landing page already exists; **no
 | **Saran** | Bluetooth and devices | Turn an iPhone into the tag, run the laptop listeners, get every RSSI reading into the system reliably, and own the monitor server, simulator, recorder and deployment |
 | **Nimai** | World model (LiDAR) and 3D live view | Scan the home, build the shared-coordinate home model, show a 3D room where the person moves as a live coordinate, and run the accessibility audit |
 | **Vineet** | ML and AI | Room classifier, door-graph HMM, position estimator, Markov destination predictor, Claude vision hazard audit, model metrics |
-| **Aarnav** | Actions, messages and analytics | Rules, redirect on the TV, familiar voice, Twilio SMS and calls, the caregiver dashboard, analytics, and the core database |
+| **Aarnav** | Actions, messages and analytics | Rules, redirect on the patient screen, familiar voice, Twilio SMS and calls, the caregiver dashboard, analytics, and the core database |
 
 ## Pipeline in one picture
 
@@ -39,11 +41,11 @@ monitor/inference (Vineet)   kNN room posterior -> door-graph HMM -> room    bus
                              Markov predictor -> next room                    bus: "prediction"
         v
 monitor/actions (Aarnav)     zone rules -> risk events -> responder           bus: "risk", "patient"
-                             -> patient_state (TV), Roku, Twilio, analytics
+                             -> patient_state (patient screen), Twilio, analytics
         v
 Supabase (events, state)  +  /ws/live (monitor broadcast of every frame, Saran)
         v
-Web: /dashboard (Aarnav) | /dashboard/world 3D live view (Nimai) | /routine on the Roku TV (Aarnav)
+Web: /dashboard (Aarnav) | /dashboard/world 3D live view (Nimai) | /routine patient screen on a tablet or laptop (Aarnav)
 
 monitor/world (Nimai) serves the HomeModel (rooms, doors, anchors) to everyone.
 Simulator (Saran) emits the same "position" and "location" events with source = "sim".
@@ -66,12 +68,11 @@ Simulator (Saran) emits the same "position" and "location" events with source = 
 | Caregiver iPhone | Receives SMS and calls, opens the dashboard | Aarnav |
 | Demo laptop | Runs the monitor, one listener, the web app | Saran |
 | 2 to 3 more laptops | One listener each (bedroom, hallway, kitchen/TV room) | Saran |
-| Mac beside the Roku | TV-room listener + fullscreen `/routine` page cast to the Roku | Saran (listener), Aarnav (cast) |
-| Roku TV | Patient screen | Aarnav |
+| Tablet or laptop in the bedroom or hallway | Patient screen: fullscreen `/routine` with sound (a listener laptop can double as it) | Aarnav |
 
 If you have fewer than 4 laptops, run bedroom, hallway and kitchen listeners and treat the TV room as the same zone as the kitchen for the demo.
 
-**Network:** use a phone hotspot or travel router for everything. Venue Wi-Fi often blocks device-to-device traffic, which breaks the listener WebSocket and the Roku. Write the monitor laptop's IP on tape on the laptop.
+**Network:** use a phone hotspot or travel router for everything. Venue Wi-Fi often blocks device-to-device traffic, which breaks the listener WebSocket. Write the monitor laptop's IP on tape on the laptop.
 
 ---
 
@@ -272,7 +273,6 @@ NEXT_PUBLIC_MONITOR_URL=http://localhost:8787
 NEXT_PUBLIC_MONITOR_WS=ws://localhost:8787/ws/live
 LISTENER_TOKEN=change-me
 TAG_SERVICE_UUID=4C414E54-4552-4E00-A000-000000000001
-ROKU_HOST=                                     # empty = Roku calls are logged, not sent
 ESCALATION_PROFILE=demo                        # demo | real
 NEXT_PUBLIC_MOCK=0                             # 1 = web runs on fixtures and a scripted walk, no backend
 ```
@@ -291,7 +291,7 @@ app/dashboard/devices/**           Saran   (listeners, calibration, sim buttons,
 app/dashboard/world/**             Nimai   (3D live view, replay, zone editor)
 app/dashboard/audit/**             Nimai   (accessibility + hazard report)
 app/dashboard/models/**            Vineet  (model metrics)
-app/routine/**                     Aarnav  (patient screen shown on the Roku)
+app/routine/**                     Aarnav  (patient screen on a tablet or laptop in the room)
 app/api/scans/**, app/api/world/** Nimai
 app/api/alerts/**, app/api/patient/**, app/api/twilio/**   Aarnav
 app/api/ask/**                     Vineet (stretch)
@@ -357,8 +357,8 @@ Percentages are of the time remaining before submission. Replace them with clock
 | Phase | Time | Focus |
 |---|---|---|
 | 0 Spike and foundation | 0 to 10% | Part 2.3 plus the Bluetooth spike in Part 3 step 1 |
-| **Gate 1** | 10% | Spike passes (tag seen by a laptop, WebSocket to the monitor, Roku answers, SMS sent, scan app builds). Foundation on `main` |
-| 1 Core loop | 10 to 40% | Tag > listeners > room > TV glow + voice > SMS. The 3D avatar moves from `/sim` and from real positions |
+| **Gate 1** | 10% | Spike passes (tag seen by a laptop, WebSocket to the monitor, patient screen plays sound, SMS sent, scan app builds). Foundation on `main` |
+| 1 Core loop | 10 to 40% | Tag > listeners > room > patient-screen glow + voice > SMS. The 3D avatar moves from `/sim` and from real positions |
 | **Gate 2** | 40% | Full loop runs (even if simulated); record a backup video of it; merge to `main` |
 | 2 Depth | 40 to 70% | HMM, position, predictor, lead time, TV-room greeting, audit, analytics, replay, vision hazards |
 | **Gate 3** | 70% | Feature freeze: everything Must and Should demoed to the team; Stretch cut if unfinished |
@@ -370,9 +370,9 @@ Percentages are of the time remaining before submission. Replace them with clock
 
 - **Gate 1:** `npm ci && npm run typecheck && npm test` pass on `main`; spike table (Part 3 step 1) passes or a fallback is chosen; seed loads; `/dashboard` and `/dashboard/world` open with fixtures.
 - **Gate 2:**
-  1. Start monitor, web, 3 to 4 listeners, `/routine` on the TV, tag phone advertising.
+  1. Start monitor, web, 3 to 4 listeners, `/routine` on the patient screen, tag phone advertising.
   2. Set quiet hours to include now. Walk the tag bedroom > hallway > kitchen.
-  3. The 3D avatar follows within about 5 s; the TV glows, then shows the bedroom photo with the family voice. Walk back to the bedroom: no SMS.
+  3. The 3D avatar follows within about 5 s; the patient screen glows, then shows the bedroom photo with the family voice. Walk back to the bedroom: no SMS.
   4. Repeat and stay in the kitchen: SMS, then the call.
   5. Turn off Bluetooth and repeat with `/dashboard/devices` sim buttons (or dragging the avatar).
 - **Gate 3:** Gate 2 plus: HMM on (no impossible jumps in the log), predicted kitchen shown in the hallway with lead time recorded, TV-room greeting, real scan's audit report, metrics page showing baseline vs model, analytics page with a night summary, a recorded night replayed in 3D.
@@ -386,8 +386,8 @@ Percentages are of the time remaining before submission. Replace them with clock
 | RSSI | `fixtures/rssi-samples.fake.csv` + `npm run dev:mock-rssi` |
 | Positions and room changes | `POST /sim/position`, `POST /sim/room`, or the scripted walk in `NEXT_PUBLIC_MOCK=1` |
 | Any bus event | `POST /debug/emit` |
-| Risk and TV | `POST /debug/force-risk`, `POST /debug/patient`, a browser tab labeled "TV (simulated)" |
-| Twilio and Roku | `TWILIO_DRY_RUN=1`, empty `ROKU_HOST` (calls are logged) |
+| Risk and patient screen | `POST /debug/force-risk`, `POST /debug/patient`, a browser tab on `/routine?preview=1` |
+| Twilio | `TWILIO_DRY_RUN=1` (texts and calls are logged) |
 
 ---
 
@@ -426,7 +426,7 @@ Do the foundation row in 2.3 first (about 45 min), then the spike below with the
 | 2 | `python listener/scan_test.py` on a Mac | Prints `LanternTag rssi=-55` several times a second | Other laptop; check Bluetooth permission |
 | 3 | Walk the tag away from the laptop | RSSI drops 10+ dB | Remove body blocking, fix hand position |
 | 4 | Listener posts to `tools/ws-echo.ts` | Echo prints JSON | Use the hotspot |
-| 5 | Roku `curl http://ROKU_IP:8060/query/device-info` from the monitor laptop (Aarnav owns Roku; you only verify the network) | XML returned | Same network; Roku network access setting |
+| 5 | Patient screen: open `/routine?h=<id>` on the tablet or laptop and tap once (Aarnav owns the screen; you only verify the network) | The page loads and the monitor socket connects | Same network; use the hotspot |
 | 6 | Supabase insert from the monitor | Row visible | Check keys |
 
 ### Step 2. Tag app `ios/LanternTag` (Phase 0)
@@ -525,7 +525,7 @@ if __name__ == "__main__":
     asyncio.run(run(p.parse_args()))
 ```
 
-- Placement: one per zone, 3 to 5 m apart, about 1 m high, lid open and plugged in, not in a bag or on metal. In a small demo space add foam board or a partition between zones. The TV-room listener sits within 1 to 2 m of the Roku. **Put the listener exactly at the anchor position in Nimai's home model**, or tell Nimai where it really is so the model matches
+- Placement: one per zone, 3 to 5 m apart, about 1 m high, lid open and plugged in, not in a bag or on metal. In a small demo space add foam board or a partition between zones. **Put the listener exactly at the anchor position in Nimai's home model**, or tell Nimai where it really is so the model matches
 - `tools/calibrate-offsets.py`: tag phone 1 m from each listener for 30 s in the same hand position; record the median RSSI; print each `--offset` that aligns them; save to `receivers.offset_db`
 - Done when: all listeners show in `/health`, and `/debug/vector` changes as you walk
 
@@ -586,8 +586,8 @@ export class RssiWindow {
 ### Step 8. CI, deployment, runbook (Phase 2 to 3)
 
 - GitHub Actions: install, `typecheck`, `test` on every push and PR; protect `main` after Gate 1
-- `tools/check-env.ts`: prints missing env vars and whether Supabase, the monitor, the Roku and Twilio (dry run) answer
-- `docs/runbook.md`: startup order and the one-page "if X breaks, do Y" table. **Startup order:** (1) hotspot on, (2) `npm run dev:monitor`, (3) `npm run dev:web` (or the Vercel URL), (4) listeners on every laptop, (5) `/routine?h=<id>` fullscreen on the Mac beside the Roku, tap once for audio, cast, (6) tag phone: open `LanternTag`, tap Start, Guided Access on
+- `tools/check-env.ts`: prints missing env vars and whether Supabase, the monitor and Twilio (dry run) answer
+- `docs/runbook.md`: startup order and the one-page "if X breaks, do Y" table. **Startup order:** (1) hotspot on, (2) `npm run dev:monitor`, (3) `npm run dev:web` (or the Vercel URL), (4) listeners on every laptop, (5) `/routine?h=<id>` fullscreen on the patient-screen tablet or laptop, tap once for audio, (6) tag phone: open `LanternTag`, tap Start, Guided Access on
 - If the web app is on Vercel (https) and the monitor on a laptop (http), browsers block it. Run the web app on the laptop for the demo, or tunnel the monitor over https
 
 ### Step 9. Demo-day device checklist (Phase 3)
@@ -596,7 +596,7 @@ export class RssiWindow {
 - [ ] Hotspot on; every device on it; monitor IP on tape
 - [ ] Tag phone charged, screen on, Auto-Lock off, app foreground, Guided Access on, in the trained hand position
 - [ ] All listeners in `/health`; offsets applied
-- [ ] `/routine` fullscreen on the TV; audio tapped; volume set
+- [ ] `/routine` fullscreen on the patient screen; audio tapped; volume set; auto-lock off
 - [ ] `ESCALATION_PROFILE=demo`; quiet hours include now
 - [ ] Sim buttons open in a spare tab; a recorded run saved locally
 
@@ -785,14 +785,14 @@ function Avatar({ target, source }: { target: { x: number; y: number }; source: 
 
 - Trail: keep the last 10 s of positions and draw a fading `Line`; show a heading arrow from `velocity`
 - Prediction: when a `prediction` frame arrives, draw a dashed route with `routeBetween(current room, nextRoom)` and light the target room outline with its probability ("kitchen 78%")
-- State coloring: floor of a risky room turns amber at `redirecting`, red at `escalated`; a small HUD shows current room, confidence, patient mode (TV glow / photo + voice), and a source chip. **SIMULATED badge** whenever `source = "sim"` or the session is a replay
+- State coloring: floor of a risky room turns amber at `redirecting`, red at `escalated`; a small HUD shows current room, confidence, patient mode (screen glow / photo + voice), and a source chip. **SIMULATED badge** whenever `source = "sim"` or the session is a replay
 - **Drag to simulate:** a toggle lets you drag the avatar on the floor; on release call `POST /sim/position {x, y}` (this is the wizard-of-oz control and the best live demo for judges)
 - Position confidence ring: radius grows when confidence is low
 - Done when: moving the avatar by dragging, by `POST /sim/room`, and by the mock walk all produce smooth motion, and a room change recolors the floor within a frame
 
 ### Step 7. Replay and time-machine (Phase 2)
 
-- `/dashboard/world/replay`: pick a recorded session (Saran's `fixtures/sessions/*.jsonl`), scrub a timeline, play, pause, speed 1x to 8x; the avatar, trail, risk coloring and TV mode follow the recording. Calls `POST /replay/start {mode: "live"}` or reads the file directly
+- `/dashboard/world/replay`: pick a recorded session (Saran's `fixtures/sessions/*.jsonl`), scrub a timeline, play, pause, speed 1x to 8x; the avatar, trail, risk coloring and patient screen mode follow the recording. Calls `POST /replay/start {mode: "live"}` or reads the file directly
 - Heat map: accumulate positions into a grid and show where time was spent (kitchen at 3 AM), as a translucent floor overlay
 - Done when: Saran's recorded night replays with the same motion and a scrubber
 
@@ -1119,7 +1119,7 @@ Branch `feat/aarnav-actions`. Commit prefix `a:`.
 
 ## Mission
 
-Everything that **happens as a result** of the signal: decide whether a movement is risky, respond first on the TV (glow, familiar photo, familiar voice), message the caregiver only if needed (SMS, call, backup), and show it all in the dashboard with analytics. Also own the core database, the patient screen, and the routine.
+Everything that **happens as a result** of the signal: decide whether a movement is risky, respond first on the patient screen (glow, familiar photo, familiar voice), message the caregiver only if needed (SMS, call, backup), and show it all in the dashboard with analytics. Also own the core database, the patient screen, and the routine.
 
 ## You own
 
@@ -1132,7 +1132,7 @@ Everything that **happens as a result** of the signal: decide whether a movement
 | `0005_core.sql`, Supabase keys, seed, `.env.example` (first hour) | Everyone |
 | Dashboard shell and `nav.config.ts` | Everyone (each owner fills in their stub pages) |
 | bus `risk` and `patient` events; `patient_state`, `risk_events`, `alerts`, `location_events` rows | Nimai (3D coloring), recorder, analytics |
-| `/routine` patient screen on the Roku | the demo |
+| `/routine` patient screen on a tablet or laptop in the room | the demo |
 | SMS and calls | the caregiver |
 | **Consume** | From |
 | `position`, `location`, `prediction` events | Vineet (or `/sim/*`, `/debug/emit`) |
@@ -1149,7 +1149,7 @@ Everything that **happens as a result** of the signal: decide whether a movement
 - `app/dashboard/layout.tsx`, `nav.config.ts` with entries for Overview, World (Nimai), Alerts, Analytics, Routine, Audit (Nimai), Models (Vineet), Devices (Saran), Settings, and a stub page for each route
 - Share the keys privately (never commit them). Done when: everyone can read and write their own tables and the dashboard loads empty
 
-### Step 2. Patient screen `/routine` (Phase 1; unblocks the TV)
+### Step 2. Patient screen `/routine` (Phase 1)
 
 - `app/routine/page.tsx?h=<householdId>`: no login, no branding. First render shows a full-screen **Tap to start** (browsers block audio until a gesture). Subscribes to `patient_state` for that household and renders by mode:
 
@@ -1175,28 +1175,15 @@ useEffect(() => {
 - Idle step player: auto-advances by time of day
 - Done when: `POST /debug/patient {"mode":"photo_voice", ...}` changes the page in under 2 s and audio plays after one tap
 
-### Step 3. Roku, AirPlay and the TV (Phase 1)
+### Step 3. The patient screen device (Phase 1)
 
-- Verify the network with Saran. `curl http://ROKU_IP:8060/query/device-info` (note `power-mode`)
-- `monitor/actions/roku.ts`:
+The Roku TV was dropped on 2026-10-24. The patient screen is the `/routine` page on a device in the room.
 
-```ts
-export class RokuClient {
-  constructor(private host?: string) {}
-  private url = (p: string) => `http://${this.host}:8060${p}`;
-  private on = () => !!this.host;
-  async info() { return this.on() ? (await fetch(this.url("/query/device-info"))).text() : "(no roku)"; }
-  async key(k: string) { if (!this.on()) return log("roku", "dry", k); await fetch(this.url(`/keypress/${k}`), { method: "POST" }); }
-  async wake() { const i = await this.info(); if (/power-mode>(DisplayOff|Standby)/i.test(i)) await this.key("PowerOn"); } // Roku TVs only
-  async showPhoto(u: string) { if (!this.on()) return log("roku", "dry photo", u);   // VERIFY on your model
-    await fetch(this.url(`/input/15985?t=p&u=${encodeURIComponent(u)}`), { method: "POST" }); }
-}
-```
-
-- **Primary output path is not ECP.** The `/routine` page is already on the TV; ECP only wakes it (and offers the media route as a fallback)
-- Casting setup, written in `docs/runbook.md`: on the Mac beside the Roku open `/routine?h=<HOUSEHOLD_ID>` fullscreen, tap once, `caffeinate -d`, Control Center > Screen Mirroring > the Roku, set Sound output to the Roku. AirPlay adds 1 to 2 s lag; use an **HDMI cable** if AirPlay is unsupported or when filming
-- `tools/find-roku.ts` (SSDP `M-SEARCH` with `ST: roku:ecp`) so setup reads "Lantern found your TV"
-- Done when: glow and photo plus voice show on the physical TV within 2 s of `/debug/patient`
+- Use a tablet or laptop with a speaker in the bedroom or hallway (where the person is when they get up). A listener laptop can double as it
+- Setup, written in `docs/runbook.md`: open `/routine?h=<HOUSEHOLD_ID>` fullscreen, tap once (sound, and the microphone if the Vapi companion is on), set the volume, turn off sleep and auto-lock, keep it plugged in
+- More than one room: `/routine?room=<room id>` on a device in each room plays only that room's cues
+- `monitor/actions/roku.ts` and `tools/find-roku.ts` stay in the code but are unused (`ROKU_HOST` empty)
+- Done when: glow and photo plus voice show on the device within 2 s of `/debug/patient`
 
 ### Step 4. Risk engine (Phase 1)
 
@@ -1227,7 +1214,7 @@ export const ESCALATION = {
 } as const;
 ```
 
-  1. Immediately: `patient_state = glow` and `roku.wake()`
+  1. Immediately: `patient_state = glow`
   2. After `voiceAfterS`: `photo_voice` with the safe room's real photo and the matching voice clip (the familiar voice in a familiar home)
   3. If the person reaches a room with no redirect rule within `returnWindowS`: `resolved`, `calm` then `idle`, **no SMS**
   4. At `smsAtS`: `escalated`, SMS to the priority-1 contact. After `callIfNoAckS` without acknowledgement: voice call. After `backupIfNoAckS`: the backup contact. An acknowledgement stops everything
@@ -1251,10 +1238,10 @@ export const ESCALATION = {
 
 ### Step 8. Caregiver dashboard (Phase 1 to 2)
 
-- Overview `/dashboard`: current room card, today's timeline of `location_events`, open `RiskCard`s (kind, room, state, **predicted or detected**, timers), listener health, Roku status, tag-offline warning, a SIMULATED badge when the last event is `source = "sim"`, and an embedded mini-map linking to Nimai's 3D view
+- Overview `/dashboard`: current room card, today's timeline of `location_events`, open `RiskCard`s (kind, room, state, **predicted or detected**, timers), listener health, patient screen online, tag-offline warning, a SIMULATED badge when the last event is `source = "sim"`, and an embedded mini-map linking to Nimai's 3D view
 - `/dashboard/alerts`: alert log with context ("kitchen, 3 min, redirect played"), acknowledge status
 - `/dashboard/routine`: editor with add, reorder, delete steps (time, title, room, photo from the scan's photos); record voice lines with `MediaRecorder` (use `audio/mp4` if WebM is unsupported) and upload to the `voice` bucket; four redirect voice slots (bedtime, kitchen, front door, morning greeting)
-- `/dashboard/settings`: contacts, quiet hours, zone rules, Roku host, escalation profile
+- `/dashboard/settings`: contacts, quiet hours, zone rules, escalation profile
 - Night mode: warm charcoal tokens during quiet hours; amber means attention, red only for true emergencies
 - `useRealtimeRows(table, householdId)` hook (initial select, subscription, de-duplicate by id)
 - Done when: the overview updates live from real events and from `/sim/*`
@@ -1277,7 +1264,7 @@ export const ESCALATION = {
 
 1. `npm run typecheck && npm test && npm run build` pass
 2. `npm run seed` fills a fresh project; the anon key can read `patient_state` and nothing else
-3. `POST /debug/emit` of a night `location` kitchen creates a risk event, glows the TV page (or the preview), then photo plus voice
+3. `POST /debug/emit` of a night `location` kitchen creates a risk event, glows the patient screen (or the preview), then photo plus voice
 4. With `ESCALATION_PROFILE=demo`, staying produces SMS then call then backup (logged under `TWILIO_DRY_RUN=1`); returning in time produces none
 5. The dashboard overview updates live and shows SIMULATED for sim events
 
@@ -1286,7 +1273,7 @@ export const ESCALATION = {
 | When | To | What |
 |---|---|---|
 | First hour | everyone | Keys, schema, seed, dashboard shell and nav stubs |
-| Step 2 | Saran | `/routine` loading with `?h=` and the tap overlay (for AirPlay tests) |
+| Step 2 | Saran | `/routine` loading with `?h=` and the tap overlay (for device setup tests) |
 | Gate 2 | Nimai | `risk` and `patient` events so the 3D view recolors |
 | Gate 2 | Vineet | The voice and photo paths used for each redirect mode |
 | Phase 2 | team | Analytics screenshots for the video |
@@ -1300,13 +1287,10 @@ export const ESCALATION = {
 | Duplicate rows in lists | Initial select plus subscription both insert | | De-duplicate by id |
 | Anon reads other tables | RLS not enabled | `pg_class.relrowsecurity` | Enable on every table |
 | Seed fails | Foreign key order | Error | households, contacts, rules, routines |
-| `/routine` blank on the TV | Wrong `h`, or waiting on the tap overlay | Open it on the Mac first | Tap once, then cast |
-| No audio on `/routine` | Autoplay blocked, or AirPlay audio routing | Click the page; Sound output | Re-show the tap overlay; select the Roku as output or use HDMI |
+| `/routine` blank on the patient screen | Wrong `h`, or waiting on the tap overlay | Open it on the device | Tap once |
+| No audio on `/routine` | Autoplay blocked, or the device is muted | Click the page; device volume | Re-show the tap overlay; turn the volume up |
 | Audio plays twice or overlaps | Effect re-runs | | Depend on `mode` and `updatedAt`; pause in cleanup |
-| AirPlay not listed | Roku lacks AirPlay 2 or different network | Roku Settings > Apple AirPlay and HomeKit | HDMI |
-| TV sleeps | Screensaver | Roku settings | Disable it; `wake()` is optional |
-| Roku calls hang | Wrong IP or network access disabled | `curl` device-info | Same network; enable access |
-| `PowerOn` does nothing | Streaming stick, or other power mode | `power-mode` | Skip waking |
+| Patient screen sleeps | Auto-lock or sleep | Device settings | Turn off auto-lock and sleep; keep it plugged in |
 | Risk never fires | Rule hours do not include now | Print the rule match | Set quiet hours to include the current time |
 | Risk fires for bathroom | Rule action not `allow` | `zone_rules` | Fix the seed |
 | Predicted risk never cancels | Timer not cleared | Fake-timer test | One timer map per risk id |
@@ -1342,20 +1326,20 @@ Concept: **"3:07 AM."** Show the scary night, show the setup, then replay the sa
 | 0:00 to 0:20 | Cold open: dark hallway, slippers, a hand reaching for the stove, caregiver asleep. One wandering statistic (verify it before using). Title card | Show feet, hands and silhouettes, not acted confusion |
 | 0:20 to 0:40 | The problem in a caregiver's voice (quote a real one if possible) | Quiet-room voiceover |
 | 0:40 to 1:20 | Setup: RoomPlan scan, the 3D home appears, hazards pop up, accessibility check, mobility check; zone editor placing listeners | Nimai |
-| 1:20 to 2:20 | "3:07 AM. Again." Split screen: footage plus the **3D view with the avatar walking** bedroom > hallway. "Predicted: kitchen 78%" in the hallway; the TV glows, the family voice plays, the person turns back, the caregiver keeps sleeping. Then the escalation version: the caregiver's phone rings with context | Saran and Aarnav |
+| 1:20 to 2:20 | "3:07 AM. Again." Split screen: footage plus the **3D view with the avatar walking** bedroom > hallway. "Predicted: kitchen 78%" in the hallway; the bedside screen glows, the family voice plays, the person turns back, the caregiver keeps sleeping. Then the escalation version: the caregiver's phone rings with context | Saran and Aarnav |
 | 2:20 to 2:45 | Dashboard and analytics, the 3 AM trend, model metrics (baseline vs model, lead time, false redirects) | Vineet and Aarnav |
 | 2:45 to 3:00 | Calm morning, pitch line, team name | |
 
 **Pitch line:** "Wander alarms scream when the door opens. We respond first, with a familiar voice in a familiar home, and wake you only when it matters."
 
-- **Judge-interactive moment:** a judge carries the tag phone toward the kitchen while the 3D avatar follows and the TV responds
+- **Judge-interactive moment:** a judge carries the tag phone toward the kitchen while the 3D avatar follows and the patient screen responds
 - Film with the DJI Osmo Action 5 handheld at chest height, low-light mode, a small warm light in frame, 4K for cropping; DJI Mic for the voice. Record the real working run first (insurance), then retakes. Name clips `scene-take-date`
 - **Edit (Vineet edits, Saran films, everyone provides screen recordings):** keep amber as the accent; captions on; overlay "Simulated" exactly when the simulator or a replay drove something; end with a one-line real vs simulated note
 - Check the Hack Ohio rules (hardware policy, video length, tracks) and talk to 2 to 3 caregivers or professionals (an OT, OSU Nursing, the Alzheimer's Association Central Ohio chapter) to get a quote for the pitch
 
 ## Real vs simulated (say it precisely)
 
-Real: the scan and home model, hazards, accessibility audit, BLE tag and listeners, classifier, HMM, position estimate, escalation, TV and phone alerts. Stand-ins: the tag is an iPhone, the listeners are laptops. Synthetic: predictor movement histories and the demo analytics history. If the simulator drove anything, say exactly what.
+Real: the scan and home model, hazards, accessibility audit, BLE tag and listeners, classifier, HMM, position estimate, escalation, patient screen and phone alerts. Stand-ins: the tag is an iPhone, the listeners are laptops. Synthetic: predictor movement histories and the demo analytics history. If the simulator drove anything, say exactly what.
 
 ## Judge Q&A (about 20 seconds each; keep the dashboard running)
 
@@ -1386,7 +1370,6 @@ Real: the scan and home model, hazards, accessibility audit, BLE tag and listene
 5. Multi-room merge (use the zone editor on one scanned space)
 6. Destination predictor (keep detected redirects; show HMM and metrics)
 7. Voice-call escalation (SMS only)
-8. Roku media route (keep the AirPlay or HDMI `/routine` page)
 
 **Never cut:** scan > home model > 3D view with the live avatar; tag > room > redirect > alert; the simulator fallback; the dashboard showing both.
 
@@ -1414,7 +1397,7 @@ Debug in layers from the tag outward. Find the first wrong layer and fix it befo
 | 8 Live frames | Frames reach the browser | `/ws/live` in the network tab | Saran |
 | 9 3D avatar | Moves smoothly, correct floor | `/dashboard/world` | Nimai |
 | 10 Risk and responder | Risk event, timers | `GET /debug/state` | Aarnav |
-| 11 Patient state and TV | `patient_state` changes, TV updates | `POST /debug/patient` | Aarnav |
+| 11 Patient state and screen | `patient_state` changes, the patient screen updates | `POST /debug/patient` | Aarnav |
 | 12 Alerts | SMS and call logged or sent | Twilio console, `TWILIO_DRY_RUN` log | Aarnav |
 
 Log prefixes in the monitor: `[ws] [win] [knn] [hmm] [loc] [pos] [pred] [risk] [resp] [roku] [twilio] [world] [live]`.
