@@ -46,8 +46,8 @@ test("which reminder worked, and last night in one paragraph", () => {
   assert.deepEqual(summarize(log.list()).workedAfterCue, { 1: 1 });
   const clock = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(Date.parse(iso));
   assert.equal(
-    nightSummary(log.list(), "Rosa", () => true, clock),
-    "Rosa was up twice last night. 3:07 AM, kitchen: back after 1 reminder; 5:22 AM, up and about: family was texted.",
+    nightSummary(log.list(), "Patient", () => true, clock),
+    "Patient was up twice last night. 3:07 AM, kitchen: back after 1 reminder; 5:22 AM, up and about: family was texted.",
   );
-  assert.equal(nightSummary([], "Rosa", () => true, clock), "Quiet night. Rosa did not need any reminders.");
+  assert.equal(nightSummary([], "Patient", () => true, clock), "Quiet night. Patient did not need any reminders.");
 });

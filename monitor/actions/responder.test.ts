@@ -24,21 +24,21 @@ function setup(opts: { voice?: VoiceCaller } = {}) {
 
   const responder = createResponder({
     householdId: "h1",
-    patientName: "Rosa",
+    patientName: "Patient",
     timeZone: "America/New_York",
     profile: P,
     contacts: [
-      { name: "Maria", phone: "+15550001", priority: 1 },
-      { name: "Luis", phone: "+15550002", priority: 2 },
+      { name: "Caregiver", phone: "+15550001", priority: 1 },
+      { name: "Backup caregiver", phone: "+15550002", priority: 2 },
     ],
     baseUrl: "http://lantern.test",
     roomName: (id) => id[0].toUpperCase() + id.slice(1),
     isSafe: (_risk, roomId) => safe.has(roomId),
     redirectFor: (_risk, here, cue) => {
       asked.push({ here, cue });
-      return { message: "Rosa, it's still nighttime. Let's go back to bed.", detail: `You're in the ${here.roomId}.`, route: [here.roomId, "bedroom"], photoPath: "h1/bedroom.jpg" };
+      return { message: "Patient, it's still nighttime. Let's go back to bed.", detail: `You're in the ${here.roomId}.`, route: [here.roomId, "bedroom"], photoPath: "h1/bedroom.jpg" };
     },
-    closingFor: (_risk, roomId) => (roomId === "bedroom" ? "Rosa, good night. Sleep well." : "Rosa, thank you."),
+    closingFor: (_risk, roomId) => (roomId === "bedroom" ? "Patient, good night. Sleep well." : "Patient, thank you."),
     settled: (roomId) => roomId === "bedroom",
     emitRisk: (r) => risks.push(r),
     emitPatient: (s) => screens.push(s),
@@ -160,7 +160,7 @@ test("back in bed after a cue: calm screen with the closing line, nothing sent",
   assert.deepEqual(s.sent, []);
   assert.deepEqual(s.states(), ["redirecting", "redirecting", "resolved"]);
   assert.deepEqual(s.modes(), ["glow", "photo_voice", "calm", "idle"]);
-  assert.equal(s.screens[2].message, "Rosa, good night. Sleep well.");
+  assert.equal(s.screens[2].message, "Patient, good night. Sleep well.");
   assert.equal(s.screens[2].roomId, "bedroom");
 });
 
@@ -173,7 +173,7 @@ test("gentle risks text the family once the last cue has had its time", () => {
   assert.equal(s.states().at(-1), "escalated");
   assert.equal(
     s.sent[0],
-    "sms +15550001 Lantern: Rosa has been up since 2:50 AM and is in the kitchen. Lantern played 3 gentle reminders and Rosa has not gone back to bed yet. Could you check on Rosa? Tap when you are on it: http://lantern.test/api/alerts/a1/ack",
+    "sms +15550001 Lantern: Patient has been up since 2:50 AM and is in the kitchen. Lantern played 3 gentle reminders and Patient has not gone back to bed yet. Could you check on Patient? Tap when you are on it: http://lantern.test/api/alerts/a1/ack",
   );
 });
 
@@ -182,7 +182,7 @@ test("urgent risks text on the usual timer while the cues go on", () => {
   s.responder.onRisk(s.risk("exit-approach", "front-door"));
   s.advance(P.smsAtS * S);
   assert.equal(s.sent.length, 1);
-  assert.match(s.sent[0], /^sms \+15550001 Lantern: Rosa is at the front door \(3:00 AM\)\. A gentle reminder is playing\. Please check on Rosa now\./);
+  assert.match(s.sent[0], /^sms \+15550001 Lantern: Patient is at the front door \(3:00 AM\)\. A gentle reminder is playing\. Please check on Patient now\./);
 });
 
 test("staying sends an SMS, then a call, then texts the backup, at the right times", () => {
@@ -205,9 +205,9 @@ test("an acknowledgement stops everything, tells the others, and a second one is
   assert.equal(s.responder.ack("a1"), true);
   s.advance(10 * 60 * S);
   assert.equal(s.states().at(-1), "resolved");
-  assert.equal(s.sent.at(-1), "sms +15550002 Lantern update: Maria is checking on Rosa now. No need to go.");
+  assert.equal(s.sent.at(-1), "sms +15550002 Lantern update: Caregiver is checking on Patient now. No need to go.");
   assert.equal(s.sent.filter((x) => x.startsWith("sms +15550001")).length, 1, "the person who acknowledged gets no more texts");
-  assert.deepEqual(s.sent.filter((x) => x.startsWith("confirm")), ["confirm +15550001 Lantern: got it, thank you. Alerts stopped. Rosa is in the kitchen."]);
+  assert.deepEqual(s.sent.filter((x) => x.startsWith("confirm")), ["confirm +15550001 Lantern: got it, thank you. Alerts stopped. Patient is in the kitchen."]);
   assert.equal(s.responder.ack("a1"), true);
   assert.equal(s.responder.ack("nope"), false);
   assert.equal(s.sent.filter((x) => x.startsWith("confirm")).length, 1, "a second tap does not confirm again");
@@ -220,7 +220,7 @@ test("going back after the family was texted sends an all clear and stops the ca
   s.responder.onLocation("bedroom", 0);
   s.advance(10 * 60 * S);
   assert.equal(s.sent.length, 2);
-  assert.match(s.sent[1], /^sms \+15550001 Lantern update: Rosa is back in the bedroom \(3:0\d AM\)\. No need to check\.$/);
+  assert.match(s.sent[1], /^sms \+15550001 Lantern update: Patient is back in the bedroom \(3:0\d AM\)\. No need to check\.$/);
 });
 
 test("an unsafe room does not end the response", () => {
@@ -349,9 +349,9 @@ test("through the monitor: a typed message shows on the TV, and help needs a run
   try {
     const screens: PatientState[] = [];
     monitor.bus.on("patient", (p) => screens.push(p));
-    const res = await post("/patient/say", { text: "  Maria is coming\nat 9.  " });
+    const res = await post("/patient/say", { text: "  Your caregiver is coming\nat 9.  " });
     assert.equal(res.status, 200);
-    assert.deepEqual([screens[0].mode, screens[0].message], ["note", "Maria is coming at 9."]);
+    assert.deepEqual([screens[0].mode, screens[0].message], ["note", "Your caregiver is coming at 9."]);
     assert.equal((await post("/patient/say", { text: "   " })).status, 400);
     assert.equal((await post("/help", {})).status, 409);
   } finally {
@@ -365,6 +365,6 @@ test("leaving the kitchen for the TV room at night: a plain thank you, and the f
   s.responder.onRisk(s.kitchen());
   s.advance(GENTLE * S + 5 * S);
   s.responder.onLocation("tv-room", 0);
-  assert.equal(s.screens.find((x) => x.mode === "calm")?.message, "Rosa, thank you.");
-  assert.match(s.sent.at(-1)!, /^sms \+15550001 Lantern update: Rosa has left the kitchen and is in the tv-room now \(3:0\d AM\)\. Lantern is still watching\.$/);
+  assert.equal(s.screens.find((x) => x.mode === "calm")?.message, "Patient, thank you.");
+  assert.match(s.sent.at(-1)!, /^sms \+15550001 Lantern update: Patient has left the kitchen and is in the tv-room now \(3:0\d AM\)\. Lantern is still watching\.$/);
 });

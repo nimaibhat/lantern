@@ -46,7 +46,7 @@ export function SayToTv({ name }: { name: string }) {
           onChange={(e) => setText(e.target.value)}
           maxLength={NOTE_MAX}
           rows={2}
-          placeholder="Maria is coming at 9 with breakfast."
+          placeholder="Your caregiver is coming at 9 with breakfast."
           aria-label={`Message for ${name}`}
         />
         <div className="say-row">

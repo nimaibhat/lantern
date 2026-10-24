@@ -74,8 +74,8 @@ export const closingLine = (name: string, night: boolean) => (night ? `${name}, 
 // The TV-room welcome by time of day (hour 0 to 23, household time).
 export const greetingLine = (name: string, hour: number) => `${name}, ${hour < 12 ? "good morning" : hour < 17 ? "good afternoon" : "good evening"}.`;
 
-// A routine step said aloud, name first: "Rosa, breakfast is in the kitchen." A title that calls them by name later
-// ("Good morning, Rosa. Time to get up.") moves the name to the front instead of saying it twice.
+// A routine step said aloud, name first: "Patient, breakfast is in the kitchen." A title that calls them by name later
+// ("Good morning, Patient. Time to get up.") moves the name to the front instead of saying it twice.
 export function routinePrompt(name: string, title: string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (!title.trim() || new RegExp(`^${escaped}\\b`, "i").test(title.trim())) return title.trim();

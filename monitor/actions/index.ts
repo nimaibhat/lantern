@@ -17,7 +17,7 @@ import { createVoiceCaller } from "./vapi";
 const TICK_MS = 15_000;
 
 // Defaults until Supabase answers, and the fallback without keys (settings.ts). Same as supabase/seed.sql.
-const DEFAULT_HOUSEHOLD: HouseholdSettings = { patientName: "Rosa", quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" };
+const DEFAULT_HOUSEHOLD: HouseholdSettings = { patientName: "Patient", quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" };
 // A scanned home calls the TV room "Living room" as often as "TV room", so both greet.
 export const rules = (householdId: string): ZoneRule[] => [
   { id: "z1", householdId, roomKind: "front-door", kind: "exit-approach", startHour: 0, endHour: 24, action: "redirect" },

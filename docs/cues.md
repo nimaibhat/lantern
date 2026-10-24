@@ -7,7 +7,7 @@ How Lantern talks to the person at home and to the family. Built on the risk eng
 
 - **Name first, every time.** Every cue, closing line and greeting starts with the person's name: it is the most
   personal word and it gets their attention before the rest.
-- **Invite, never command.** "Rosa, it's still nighttime. Let's go back to bed." Never "go to sleep", never "don't".
+- **Invite, never command.** "Patient, it's still nighttime. Let's go back to bed." Never "go to sleep", never "don't".
 - **Same calm words every time.** Changing the wording between repeats confuses. Volume and tone never rise.
 - **Give time first.** People are often disoriented for a few minutes after waking, and night bathroom trips are
   normal. Lantern waits before it says anything, except at the front door.
@@ -17,17 +17,17 @@ How Lantern talks to the person at home and to the family. Built on the risk eng
 ## The cue
 
 1. **Grace period.** After getting out of bed at night, nothing plays for `graceS` (5 min, adjustable with
-   `CUE_GRACE_MIN`). The dashboard shows "giving Rosa time". The front door and a long bathroom stay skip it.
+   `CUE_GRACE_MIN`). The dashboard shows "giving Patient time". The front door and a long bathroom stay skip it.
 2. **Glow.** The TV wakes with a low warm light.
 3. **Chime, then the sentence.** A soft two-note chime (Web Audio, no file), a pause, then the cue:
-   - shown big: "Rosa, it's still nighttime. Let's go back to bed."
+   - shown big: "Patient, it's still nighttime. Let's go back to bed."
    - shown smaller and spoken after it: "You're in the kitchen. Your bed is back through the hallway."
    - a route strip under it: Kitchen > Hallway > Bedroom, built from the scan's door graph (`roomPath`).
 4. **Repeat.** Every `repeatEveryS`, up to `maxCues`, with the same words. If they move, the next cue starts from
    the new room. From the second cue on, the family's recording plays when there is one, or, if it is switched on,
    the Vapi companion takes over and talks with them (`docs/vapi.md`).
-5. **Back in a safe room.** The cue stops. In bed at night the screen says "Rosa, good night. Sleep well." then
-   fades; anywhere else safe (the TV room after leaving the kitchen) it says "Rosa, thank you."
+5. **Back in a safe room.** The cue stops. In bed at night the screen says "Patient, good night. Sleep well." then
+   fades; anywhere else safe (the TV room after leaving the kitchen) it says "Patient, thank you."
 6. **Still not back.** The family gets one calm text with what happened and what to do, then a call (the Vapi agent
    when set up, which can hear "yes, I'll go"), then the backup.
 
@@ -52,11 +52,11 @@ Gentle kinds: `kitchen-night`, `night-wandering`, `no-movement`. Urgent kinds: `
 
 - The idle screen is a "Now and Next" guide from the routine: the current step big, with the room's photo, and the
   next step small. It follows the clock.
-- At a step's time the same chime plays and the step is spoken, name first ("Rosa, breakfast is in the kitchen.").
+- At a step's time the same chime plays and the step is spoken, name first ("Patient, breakfast is in the kitchen.").
   It repeats every 5 minutes, at most 3 times, until the person reaches that room or someone taps Done. A step more
   than an hour old is never prompted, so nothing plays in the middle of the night. Times show as "3:00 PM".
 - **A message from the family.** The overview's "Say something on the TV" box shows what the caregiver types, big,
-  for one minute, after the chime, read aloud as "Rosa, ...". The monitor refuses while a reminder is playing, so
+  for one minute, after the chime, read aloud as "Patient, ...". The monitor refuses while a reminder is playing, so
   two voices never overlap. The text is never logged.
 - `/signs` prints a label for each scanned room, with its photo when there is one, to tape on its door.
 
@@ -68,7 +68,7 @@ during quiet hours, and minutes per room today. The overview shows it live.
 ## The family
 
 - Texts say what happened, what Lantern already did, and one next step, in plain words. No pronouns for the person.
-- When a person who was texted goes back to bed on their own, everyone texted gets "Update: Rosa is back in the
+- When a person who was texted goes back to bed on their own, everyone texted gets "Update: Patient is back in the
   bedroom. No need to check." If they only left the risky room (the TV room at 3 AM), the update says so and that
   Lantern is still watching, without "no need to check".
 - When someone taps the link, the other contact (if texted) hears that someone is on it.

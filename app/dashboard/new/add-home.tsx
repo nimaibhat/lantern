@@ -83,11 +83,11 @@ export function AddHome({ address }: { address: string }) {
             <form onSubmit={create} className="add-form">
               <label>
                 Home name
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="The Okafor home" maxLength={60} required />
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Demo home" maxLength={60} required />
               </label>
               <label>
                 First name of the person who lives there
-                <input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Grace" maxLength={40} required />
+                <input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Patient" maxLength={40} required />
               </label>
               <label>
                 How they get around

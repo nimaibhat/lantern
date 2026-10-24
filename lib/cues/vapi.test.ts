@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { FamilyFacts } from "./family";
 import { HELP_TOOL, VAPI_MODEL, callOutcome, companionAssistant, companionPrompt, familyCallAssistant, familyCallRequest } from "./vapi";
 
-const facts: FamilyFacts = { name: "Rosa", kind: "kitchen-night", room: "Kitchen", since: "3:04 AM", reminders: 3 };
+const facts: FamilyFacts = { name: "Patient", kind: "kitchen-night", room: "Kitchen", since: "3:04 AM", reminders: 3 };
 
 test("a family call sends the whole assistant when no dashboard assistant is set", () => {
   const body = familyCallRequest({ phoneNumberId: "pn1", to: "+15550001", facts, riskEventId: "k1" }) as Record<string, any>;
@@ -12,7 +12,7 @@ test("a family call sends the whole assistant when no dashboard assistant is set
   assert.deepEqual(body.metadata, { riskEventId: "k1" });
   assert.equal(body.assistant.model.provider, "anthropic");
   assert.equal(body.assistant.model.model, VAPI_MODEL);
-  assert.match(body.assistant.firstMessage, /^Hi, this is Lantern, calling about Rosa\. Rosa has been up since 3:04 AM/);
+  assert.match(body.assistant.firstMessage, /^Hi, this is Lantern, calling about Patient\. Patient has been up since 3:04 AM/);
   assert.equal(body.assistant.artifactPlan.recordingEnabled, false);
   assert.equal(body.assistant.analysisPlan.structuredDataPlan.schema.required[0], "canCheck");
 });
@@ -21,7 +21,7 @@ test("a dashboard assistant gets the facts as variables instead", () => {
   const body = familyCallRequest({ phoneNumberId: "pn1", to: "+1", facts, assistantId: "as1", riskEventId: "k1" }) as Record<string, any>;
   assert.equal(body.assistantId, "as1");
   assert.equal(body.assistant, undefined);
-  assert.equal(body.assistantOverrides.variableValues.name, "Rosa");
+  assert.equal(body.assistantOverrides.variableValues.name, "Patient");
   assert.equal(body.assistantOverrides.variableValues.reminders, "3");
 });
 
@@ -43,14 +43,14 @@ test("call outcomes", () => {
 });
 
 test("the companion speaks the same cue first, calmly, and can ask the family for help", () => {
-  const a = companionAssistant({ name: "Rosa", kind: "kitchen-night", message: "Rosa, it's still nighttime. Let's go back to bed.", detail: "You're in the kitchen.", night: true }) as Record<string, any>;
-  assert.equal(a.firstMessage, "Rosa, it's still nighttime. Let's go back to bed. You're in the kitchen.");
+  const a = companionAssistant({ name: "Patient", kind: "kitchen-night", message: "Patient, it's still nighttime. Let's go back to bed.", detail: "You're in the kitchen.", night: true }) as Record<string, any>;
+  assert.equal(a.firstMessage, "Patient, it's still nighttime. Let's go back to bed. You're in the kitchen.");
   assert.equal(a.voice.voiceId, "Zoe");
   assert.deepEqual(a.endCallPhrases, ["sleep well"]);
   assert.equal(a.model.tools[0].function.name, HELP_TOOL);
   assert.deepEqual(a.clientMessages, ["tool-calls"]);
-  const prompt = companionPrompt({ name: "Rosa", kind: "exit-approach", message: "", night: false });
-  assert.match(prompt, /Start what you say with Rosa's name/);
+  const prompt = companionPrompt({ name: "Patient", kind: "exit-approach", message: "", night: false });
+  assert.match(prompt, /Start what you say with Patient's name/);
   assert.match(prompt, /Never mention danger/);
-  assert.match(prompt, /See you soon, Rosa\. Take care\./);
+  assert.match(prompt, /See you soon, Patient\. Take care\./);
 });
