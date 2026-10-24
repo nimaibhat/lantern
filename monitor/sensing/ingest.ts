@@ -9,7 +9,7 @@ import type { Config } from "../config";
 import { RssiWindow } from "./window";
 
 const ListenerMsgSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("hello"), receiverId: z.string(), kind: z.enum(["mac-bleak", "iphone", "replay"]) }),
+  z.object({ type: z.literal("hello"), receiverId: z.string(), kind: z.enum(["mac-bleak", "iphone", "replay", "web-bluetooth"]) }),
   z.object({ type: z.literal("rssi"), receiverId: z.string(), tagId: z.string(), rssi: z.number(), ts: z.number() }),
   z.object({ type: z.literal("hb"), receiverId: z.string(), ts: z.number() }),
 ]);
@@ -100,9 +100,38 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
     handleMessage(ws, raw);
   }
 
+  /** Accept a listener message over HTTP (used by the browser-based Web Bluetooth listener). */
+  function handleHttp(raw: unknown): boolean {
+    let msg;
+    try {
+      msg = ListenerMsgSchema.parse(raw);
+    } catch {
+      return false;
+    }
+
+    if (!admit(msg.receiverId)) return false;
+
+    const now = Date.now();
+    if (msg.type === "hello") {
+      log("sensing", `listener connected: ${msg.receiverId} (${msg.kind})`);
+      lastSeen.set(msg.receiverId, now);
+      store.listeners[msg.receiverId] = true;
+    } else if (msg.type === "hb") {
+      lastSeen.set(msg.receiverId, now);
+      store.listeners[msg.receiverId] = true;
+    } else if (msg.type === "rssi") {
+      if (now - msg.ts > STALE_MS) return true;
+      lastSeen.set(msg.receiverId, now);
+      store.listeners[msg.receiverId] = true;
+      store.tagLastSeen = now;
+      window.push({ receiverId: msg.receiverId, rssi: msg.rssi, ts: msg.ts });
+    }
+    return true;
+  }
+
   function stop() {
     clearInterval(frameInterval);
   }
 
-  return { handleRaw, window, stop };
+  return { handleRaw, handleHttp, window, stop };
 }

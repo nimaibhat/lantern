@@ -2,6 +2,16 @@
 // advertisement. The file this builds listens on that laptop and posts dBm to the hub.
 // A scriptblock passed to add_Received never fires. A real WinRT delegate does.
 
+// Next binds 0.0.0.0, so the request URL is not the address the other laptop opened.
+export function originFor(request: Request): string {
+  const url = new URL(request.url);
+  const raw = (request.headers.get("x-forwarded-host") || request.headers.get("host") || "").split(",")[0]?.trim() ?? "";
+  if (!raw || raw === "0.0.0.0" || raw.startsWith("0.0.0.0:")) return url.origin;
+  const forwarded = request.headers.get("x-forwarded-proto");
+  const proto = forwarded === "http" || forwarded === "https" ? forwarded : url.protocol.replace(":", "");
+  return `${proto}://${raw}`;
+}
+
 function utf16leBase64(text: string): string {
   let binary = "";
   for (let i = 0; i < text.length; i++) {
@@ -11,12 +21,11 @@ function utf16leBase64(text: string): string {
   return btoa(binary);
 }
 
-export function earBat(deviceId: string, postUrl: string, label: string): string {
+export function earScript(deviceId: string, postUrl: string): string {
   if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
   const post = postUrl.trim().replace(/\/$/, "");
   if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
-  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
-  const script = `
+  return `
 $ErrorActionPreference = "Continue"
 $deviceId = "${deviceId}"
 $post = "${post}"
@@ -30,6 +39,9 @@ public class LanternEar {
       var adv = args.GetType().GetProperty("Advertisement").GetValue(args, null);
       var name = adv.GetType().GetProperty("LocalName").GetValue(adv, null) as string ?? "";
       bool hit = name.ToLowerInvariant().Contains("lantern");
+      if (!hit) {
+        try { hit = SectionHasLantern(adv); } catch { }
+      }
       if (!hit) {
         var uuids = adv.GetType().GetProperty("ServiceUuids").GetValue(adv, null) as System.Collections.IEnumerable;
         if (uuids != null) {
@@ -46,6 +58,26 @@ public class LanternEar {
       Err = ex.Message;
     }
   }
+  static bool SectionHasLantern(object adv) {
+    var sections = adv.GetType().GetProperty("DataSections").GetValue(adv, null) as System.Collections.IEnumerable;
+    if (sections == null) return false;
+    foreach (var section in sections) {
+      int type = System.Convert.ToInt32(section.GetType().GetProperty("DataType").GetValue(section, null));
+      if (type != 8 && type != 9) continue;
+      var buffer = section.GetType().GetProperty("Data").GetValue(section, null);
+      if (buffer == null) continue;
+      var asm = System.Reflection.Assembly.Load("System.Runtime.WindowsRuntime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+      var ext = asm.GetType("System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions");
+      var toArray = ext.GetMethods()[0];
+      foreach (var method in ext.GetMethods()) {
+        if (method.Name == "ToArray" && method.GetParameters().Length == 1) { toArray = method; break; }
+      }
+      var bytes = (byte[])toArray.Invoke(null, new object[] { buffer });
+      var text = System.Text.Encoding.UTF8.GetString(bytes).ToLowerInvariant();
+      if (text.Contains("lantern")) return true;
+    }
+    return false;
+  }
 }
 '@
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -61,6 +93,9 @@ if (Test-Path $pidFile) {
   if ($old) { Stop-Process -Id $old -Force -ErrorAction SilentlyContinue }
 }
 Set-Content -Path $pidFile -Value $PID
+try {
+  Invoke-RestMethod -Uri $post -Method Post -Body ('{"action":"view","hub":false,"hostLocal":false,"pairShown":true,"error":"scanner-up ' + $deviceId + '","protocol":"https:"}') -ContentType "application/json" | Out-Null
+} catch {}
 try { $watcher.Start() } catch { Write-Output "Turn Bluetooth on for this computer."; exit 1 }
 Write-Output "Listening for LanternTag. Leave this window open."
 $lastPost = [int64]0
@@ -81,12 +116,33 @@ while ($null -ne $delegate) {
 }
 $watcher.remove_Received($token) | Out-Null
 `.trim();
-  const command = utf16leBase64(script);
+}
+
+export function earBat(deviceId: string, postUrl: string, label: string): string {
+  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
+  const command = utf16leBase64(earScript(deviceId, postUrl));
   return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${command}\r\n`;
 }
 
-// Same listener as the bat, started with no window. Each Windows laptop runs its own copy.
-export function earHidden(deviceId: string, postUrl: string, label: string): string {
-  const encoded = earBat(deviceId, postUrl, label).split("-EncodedCommand ")[1]?.trim() ?? "";
-  return `Set shell = CreateObject("Wscript.Shell")\r\nshell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand ${encoded}", 0, False\r\n`;
+// The scanner script is about 9000 characters. A downloaded file that long never
+// starts. This file is short: the other laptop downloads it, then pulls the script.
+// The window stays open so a Bluetooth or download error is visible.
+export function earLaunch(deviceId: string, postUrl: string, label: string): string {
+  if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
+  const post = postUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
+  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
+  const earUrl = `${post}/ear?id=${deviceId.toLowerCase()}`;
+  const command = [
+    "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}",
+    "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12",
+    `$u='${earUrl}'`,
+    "$p=Join-Path $env:TEMP 'lantern-ear.ps1'",
+    "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $p",
+    "if (-not (Test-Path $p)) { Write-Output 'Could not download the listener.'; exit 1 }",
+    "Unblock-File -Path $p",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p",
+  ].join("; ");
+  if (command.length > 2000) throw new Error("launcher command is too long");
+  return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${command}"\r\nif errorlevel 1 (\r\n  echo Could not download the listener.\r\n  pause\r\n)\r\n`;
 }

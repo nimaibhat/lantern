@@ -97,4 +97,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"[agent] this laptop can join the hub. Open the hub page and press Listen. (port {PORT})", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    # Bind to all interfaces so the hub dashboard (running on another machine) can reach this agent.
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

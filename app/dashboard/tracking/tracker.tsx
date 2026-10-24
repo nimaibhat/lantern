@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { earHidden } from "@/lib/sensing/ear-bat";
 import { roughFeet } from "@/lib/sensing/feet";
 import { closestRoom, type Placement, type Reading } from "@/lib/sensing/nearest-room";
 import type { Receiver } from "@/lib/types";
@@ -9,7 +8,14 @@ import type { Receiver } from "@/lib/types";
 const WS_URL = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const SERVICE = "4c414e54-4552-4e00-a000-000000000001";
 
-type AdEvent = Event & { rssi?: number; name?: string; uuids?: string[]; device?: { name?: string } };
+type AdEvent = Event & {
+  rssi?: number;
+  name?: string;
+  uuids?: string[];
+  device?: { name?: string };
+  manufacturerData?: { forEach: (fn: (value: DataView, key: number) => void) => void };
+  serviceData?: { forEach: (fn: (value: DataView, key: string) => void) => void };
+};
 type BleDevice = {
   name?: string;
   watchAdvertisements?: () => Promise<void>;
@@ -54,20 +60,24 @@ function browserCanWatch(): boolean {
   return typeof proto?.watchAdvertisements === "function";
 }
 
-function adMatches(event: AdEvent): boolean {
-  const name = `${event.name ?? ""} ${event.device?.name ?? ""}`.toLowerCase();
-  const uuids = (event.uuids ?? []).map((id) => id.toLowerCase());
-  return name.includes("lantern") || uuids.includes(SERVICE);
+function bytesToText(view: DataView): string {
+  let text = "";
+  for (let i = 0; i < view.byteLength; i++) text += String.fromCharCode(view.getUint8(i));
+  return text.toLowerCase();
 }
 
-async function onHub(): Promise<boolean> {
-  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return true;
-  try {
-    const res = await fetch("http://127.0.0.1:3010/", { signal: AbortSignal.timeout(800) });
-    return res.ok;
-  } catch {
-    return false;
-  }
+function adMatches(event: AdEvent): boolean {
+  const chunks = [event.name ?? "", event.device?.name ?? ""];
+  event.manufacturerData?.forEach((value) => chunks.push(bytesToText(value)));
+  event.serviceData?.forEach((value, key) => chunks.push(key, bytesToText(value)));
+  const name = chunks.join(" ").toLowerCase();
+  const uuids = (event.uuids ?? []).map((id) => id.toLowerCase());
+  return name.includes("lantern") || uuids.includes(SERVICE) || name.includes(SERVICE);
+}
+
+function pageIsHub(): boolean {
+  if (typeof location === "undefined") return false;
+  return location.hostname === "localhost" || location.hostname === "127.0.0.1";
 }
 
 async function askAgent(deviceId: string): Promise<boolean> {
@@ -95,10 +105,14 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [connected, setConnected] = useState(true);
   const [mineId, setMineId] = useState<string | null>(null);
   const [mineName, setMineName] = useState("");
-  const [hub, setHub] = useState(true);
+  const [hub, setHub] = useState(false);
+  const [launchId, setLaunchId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
+  const [shareUrl, setShareUrl] = useState("");
+  const [wantedIds, setWantedIds] = useState<string[]>([]);
+  const [askId, setAskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const held = useRef<string | null>(null);
   const savedRoom = useRef<string | null>(null);
@@ -138,17 +152,18 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         }
       }).catch(() => {});
     }
-    onHub().then((here) => {
-      setHub(here);
-      // This computer hears in a hidden listener. Opening the page keeps that going.
-      if (here && saved && name) {
-        fetch("/api/tracking", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "join", name, deviceId: saved, listen: true, hub: true, replace: false }),
-        }).catch(() => {});
-      }
-    });
+    const as = new URLSearchParams(location.search).get("as");
+    if (as && /^ear-[a-f0-9]{8}$/i.test(as)) setAskId(as);
+    const here = pageIsHub();
+    setHub(here);
+    // This computer hears in a listener. Opening the page on the server machine keeps that going.
+    if (here && saved && name) {
+      fetch("/api/tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "join", name, deviceId: saved, listen: true, hub: true, replace: false, protocol: location.protocol }),
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -199,16 +214,23 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           setPlaced(ears(data.receivers));
           setLabels(Object.fromEntries(data.receivers.map((r: { id: string; label: string }) => [r.id, r.label])));
         }
+        if (typeof data.shareUrl === "string" && data.shareUrl) setShareUrl(data.shareUrl);
+        if (Array.isArray(data.wanted)) {
+          setWantedIds((data.wanted as unknown[]).filter((id): id is string => typeof id === "string" && /^ear-[a-f0-9]{8}$/i.test(id)));
+        }
         if (Array.isArray(data.devices)) {
+          const freshIds = new Set<string>();
           setReadings((prev) => {
             const next = { ...prev };
             for (const d of data.devices as { id: string; rssi: number; ageMs: number }[]) {
               browserIds.current.add(d.id);
               const fresh = d.ageMs < 5000 && d.rssi > -100;
+              if (fresh) freshIds.add(d.id);
               next[d.id] = { id: d.id, online: fresh, rssi: fresh ? d.rssi : -100 };
             }
             return next;
           });
+          setLaunchId((current) => (current && freshIds.has(current) ? null : current));
         }
       } catch {}
     };
@@ -275,10 +297,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   }
 
   async function saveLaptop(name: string, listen: boolean, hubMachine: boolean, replace = false) {
+    const local = pageIsHub();
     const res = await fetch("/api/tracking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen, hub: hubMachine, replace }),
+      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen: listen && local, hub: hubMachine && local, replace, protocol: location.protocol }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || typeof data.deviceId !== "string") {
@@ -298,8 +321,10 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setLabels((prev) => ({ ...prev, [data.deviceId]: label }));
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
-    if (listen && data.listening === true) setNote("This computer is looking for the phone. Leave this page open.");
-    if (listen && data.listening === false) setNote("This computer is already scanning as another laptop. Pair on the other computer.");
+    if (listen && local && data.listening === false) {
+      setNote("This laptop could not start listening. Turn Bluetooth on and press Pair again.");
+      return false;
+    }
     return true;
   }
 
@@ -332,30 +357,25 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     return true;
   }
 
-  // Each laptop scans with its own radio. The reading is posted to the hub, which stores it for every screen.
+  // Pick LanternTag itself. A broad scan marks the page as listening and then drops the phone.
   async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
     const bt = bluetooth();
     if (!browserCanWatch() || !bt) return "unavailable";
     try {
-      if (typeof bt.requestLEScan === "function" && bt.addEventListener) {
-        try {
-          await bt.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
-        } catch (scanErr) {
-          const scanName = scanErr instanceof DOMException ? scanErr.name : "";
-          if (scanName === "NotFoundError" || scanName === "AbortError") return "cancelled";
-          await bt.requestLEScan({
-            filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
-            keepRepeatedDevices: true,
-          });
-        }
+      const device = await bt.requestDevice({
+        filters: [{ namePrefix: "Lantern" }, { namePrefix: "lantern" }, { services: [SERVICE] }],
+      });
+      bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
+      const watching = await watchDevice(device);
+      if (!watching && typeof bt.requestLEScan === "function" && bt.addEventListener) {
+        await bt.requestLEScan({
+          filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
+          keepRepeatedDevices: true,
+        });
         bt.addEventListener("advertisementreceived", (event) => onAd(event, true));
         return "watching";
       }
-      const device = await bt.requestDevice({
-        filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
-      });
-      bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
-      return (await watchDevice(device)) ? "watching" : "unavailable";
+      return watching ? "watching" : "unavailable";
     } catch (err) {
       const picked = err instanceof DOMException ? err.name : "";
       // #region agent log
@@ -384,46 +404,46 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       return;
     }
     setNote("");
+    setLaunchId(null);
     setBusy(true);
-    const previous = deviceIdRef.current;
     if (existingId) deviceIdRef.current = existingId;
     try {
       const bt = bluetooth();
       const kind = laptopKind();
+      const here = pageIsHub();
+      setHub(here);
       // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start kind ${kind} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal: here, pairShown: true, error: `pair-start kind ${kind} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
       if (kind === "ios") {
         setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
         return;
       }
       // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
-      const watched = kind === "mac" ? await listenInPage() : "unavailable";
-      // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
-      // #endregion
-      if (watched === "cancelled") {
-        setNote("Pick LanternTag in the list.");
-        return;
-      }
-      if (watched === "watching") {
-        const saved = await saveLaptop(trimmed, false, false);
-        if (saved) setNote("Looking for the phone on this laptop. Leave this page open.");
-        return;
-      }
       if (kind === "mac") {
+        const watched = await listenInPage();
+        // #region agent log
+        fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal: here, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
+        // #endregion
+        if (watched === "cancelled") {
+          setNote("Pick LanternTag in the list.");
+          return;
+        }
+        if (watched === "watching") {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
+          return;
+        }
         setNote("Chrome on this Mac could not hear the phone. Press Pair again and choose LanternTag.");
         return;
       }
-      const here = await onHub();
-      setHub(here);
       if (kind !== "windows") {
         setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
         return;
       }
-      if (here && existingId && previous && existingId !== previous) {
-        deviceIdRef.current = previous;
-        setNote(`Open Tracking on the ${trimmed} laptop and press Pair. This computer keeps listening as its own room.`);
+      if (here) {
+        const saved = await saveLaptop(trimmed, true, true, true);
+        if (saved) setNote("This laptop is listening. Leave this page open.");
         return;
       }
       const saved = await saveLaptop(trimmed, false, false);
@@ -433,33 +453,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This laptop is listening. Leave this page open.");
         return;
       }
-      if (here) {
-        await saveLaptop(trimmed, true, true, true);
-        return;
-      }
-      {
-        const file = new Blob([earHidden(id, `${location.origin}/api/tracking`, trimmed)], { type: "text/vbscript" });
-        const url = URL.createObjectURL(file);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "Lantern.vbs";
-        link.click();
-        URL.revokeObjectURL(url);
-        // #region agent log
-        fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch windows-hidden ${id}`, protocol: location.protocol }) }).catch(() => {});
-        // #endregion
-        setNote("Open the Lantern file that downloaded. It stays hidden, and this laptop listens for the phone.");
-      }
+      setLaunchId(id);
+      setNote("Open the Lantern file. Leave its window open until this laptop shows a dBm reading.");
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {
       setBusy(false);
     }
-  }
-
-  function claim(id: string, label: string) {
-    if (!/^ear-[a-f0-9]{8}$/i.test(id)) return;
-    void pairLaptop(label, id);
   }
 
   async function connect(name: string) {
@@ -507,12 +507,15 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const heardCards = cards.filter((c) => c.reading?.online && (c.reading?.rssi ?? -100) > -100);
   const lead = heardCards.find((c) => c.id === call?.receiverId);
   const others = heardCards.filter((c) => c.id !== call?.receiverId);
+  const shownNote = lead && /looking for the phone/.test(note) ? "" : note;
   const nameOf = (id: string) => labels[id] || "Unnamed";
   const mineReading = mineId ? readings[mineId] : undefined;
   const mineHears = !!mineReading?.online && (mineReading?.rssi ?? -100) > -100;
   const detail = lead
     ? `About ${Math.round(roughFeet(lead.reading!.rssi))} ft from ${nameOf(lead.id)}.${others.map((o) => ` ${nameOf(o.id)} is about ${Math.round(roughFeet(o.reading!.rssi))} ft.`).join("")}`
     : "";
+  const inviteId = [askId, ...wantedIds].find((id) => id && !readings[id]?.online) ?? null;
+  const showStart = !hub && !!inviteId;
 
   return (
     <div className="tracking">
@@ -523,6 +526,21 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           {detail && <p className="muted">{detail}</p>}
         </div>
       </div>
+
+      {showStart && inviteId && (
+        <div className="card track-card lead">
+          <p className="eyebrow">This laptop</p>
+          <h2>{nameOf(inviteId)}</h2>
+          <p>Press Start so this computer hears the phone and sends its own signal.</p>
+          {launchId === inviteId ? (
+            <a className="btn" href={`/api/tracking/launch?id=${inviteId}`}>Open listener</a>
+          ) : (
+            <button className="btn" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(inviteId), inviteId)}>
+              Start
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="track-grid">
         {cards.map((c) => {
@@ -542,11 +560,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
               <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
-              {!heard && (
-                <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(c.id, nameOf(c.id))}>
+              {!heard && (launchId === c.id ? (
+                <a className="btn small" href={`/api/tracking/launch?id=${c.id}`}>Open listener</a>
+              ) : (
+                <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(c.id), c.id)}>
                   Pair
                 </button>
-              )}
+              ))}
             </section>
           );
         })}
@@ -566,11 +586,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           >
             Rename
           </button>
-          {!mineHears && mineId && (
-            <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(mineId, mineName)}>
+          {!mineHears && mineId && (launchId === mineId ? (
+            <a className="btn small" href={`/api/tracking/launch?id=${mineId}`}>Open listener</a>
+          ) : (
+            <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(mineName, mineId)}>
               Pair
             </button>
-          )}
+          ))}
         </div>
       ) : (
         <form
@@ -595,7 +617,12 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           </div>
         </form>
       )}
-      {note && <p>{note}</p>}
+      {shownNote && <p>{shownNote}</p>}
+      {shareUrl && placed.length > 0 && (
+        <p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+          Other laptops: open <strong>{shareUrl}</strong> and press Pair
+        </p>
+      )}
     </div>
   );
 }
