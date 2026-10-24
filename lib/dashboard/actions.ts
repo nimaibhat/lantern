@@ -7,7 +7,7 @@ import { db } from "@/lib/supabase/server";
 import { replaceRuleItems } from "@/lib/audit/store";
 import type { AuditStatus, Mobility, RoomPreview, RoutineStep } from "@/lib/types";
 import { isMobility } from "@/lib/dashboard/mobility";
-import { getHomeModel, syncHazards } from "@/lib/world/store";
+import { getHomeModel, reloadMonitor, syncHazards } from "@/lib/world/store";
 import { startRoomPreview } from "@/lib/scan/room-preview";
 import { checkWorld } from "@/lib/scan/worldlabs";
 
@@ -38,6 +38,26 @@ export async function setMobility(mobility: Mobility): Promise<number> {
   if (saved) await syncHazards(householdId);
   revalidatePath("/dashboard", "layout");
   return count;
+}
+
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const tidy = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+
+// Saves the Household card in Settings; the monitor reloads it so quiet hours and the name in cues change right away.
+export async function saveHousehold(input: { name: string; patientName: string; quietHoursStart: string; quietHoursEnd: string }) {
+  const name = tidy(input.name, 60);
+  const patientName = tidy(input.patientName, 40);
+  if (!name || !patientName) throw new Error("Give the home a name and say who lives there.");
+  if (!TIME.test(input.quietHoursStart) || !TIME.test(input.quietHoursEnd)) throw new Error("Quiet hours need a start and end time.");
+  if (!db) return;
+  const householdId = await writableHouseholdId();
+  const { error } = await db
+    .from("households")
+    .update({ name, patient_name: patientName, quiet_hours_start: input.quietHoursStart, quiet_hours_end: input.quietHoursEnd })
+    .eq("id", householdId);
+  if (error) throw new Error(error.message);
+  await reloadMonitor("/household/reload");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function addRoutineStep(input: { time: string; title: string; roomId: string }): Promise<RoutineStep> {

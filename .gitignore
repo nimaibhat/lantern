@@ -70,3 +70,6 @@ __pycache__/
 ios/*.xcodeproj/
 ios/build/
 xcuserdata/
+
+# Personal Claude Code settings (each person keeps their own)
+.claude/settings.local.json

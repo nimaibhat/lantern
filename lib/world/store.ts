@@ -72,13 +72,12 @@ export async function syncHazards(householdId: string): Promise<number> {
   return hazards.length;
 }
 
-// Tell a running monitor to pick up the new model. Best effort: the monitor may not be running.
-async function reloadMonitor() {
-  const url = process.env.MONITOR_URL || process.env.NEXT_PUBLIC_MONITOR_URL;
-  if (!url) return;
+// Tell a running monitor to pick up the new model (or the saved Settings). Best effort: it may not be running.
+export async function reloadMonitor(path: "/world/reload" | "/household/reload" = "/world/reload") {
+  const url = process.env.MONITOR_URL || process.env.NEXT_PUBLIC_MONITOR_URL || "http://localhost:8787"; // same default as the dashboard
   try {
-    await fetch(`${url}/world/reload`, { method: "POST", signal: AbortSignal.timeout(1500) });
+    await fetch(`${url}${path}`, { method: "POST", signal: AbortSignal.timeout(1500) });
   } catch {
-    // Not running; it loads the newest model on start.
+    // Not running; it loads the newest model and settings on start.
   }
 }
