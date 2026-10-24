@@ -120,6 +120,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const deviceIdRef = useRef<string | null>(null);
   const latest = useRef<{ rssi: number; at: number } | null>(null);
   const watchingRef = useRef(false);
+  const bleDeviceRef = useRef<BleDevice | null>(null);
+  const adCountRef = useRef(0);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("lantern-ear");
@@ -341,6 +343,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   }
 
   function onAd(event: AdEvent, strict: boolean) {
+    adCountRef.current += 1;
     const rssi = event.rssi;
     const matched = !strict || adMatches(event);
     // #region agent log
@@ -352,6 +355,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
 
   async function watchDevice(device: BleDevice): Promise<boolean> {
     if (typeof device.watchAdvertisements !== "function") return false;
+    // Store device ref so it's never garbage-collected while scanning
+    bleDeviceRef.current = device;
     device.addEventListener("advertisementreceived", (event) => onAd(event, false));
     await device.watchAdvertisements();
     return true;
@@ -361,10 +366,12 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
     const bt = bluetooth();
     if (!browserCanWatch() || !bt) return "unavailable";
+    adCountRef.current = 0;
     try {
       const device = await bt.requestDevice({
         filters: [{ namePrefix: "Lantern" }, { namePrefix: "lantern" }, { services: [SERVICE] }],
       });
+      bleDeviceRef.current = device;
       bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
       const watching = await watchDevice(device);
       if (!watching && typeof bt.requestLEScan === "function" && bt.addEventListener) {
@@ -387,6 +394,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const device = await bt.requestDevice({
             filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
           });
+          bleDeviceRef.current = device;
           return (await watchDevice(device)) ? "watching" : "unavailable";
         } catch (again) {
           const name = again instanceof DOMException ? again.name : "";
@@ -449,7 +457,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
         return;
       }
-      // All Windows devices (hub or not): try Web Bluetooth first — zero install
+      // Hub Windows: use the Python scanner (runs in background, reliable)
+      if (here) {
+        const saved = await saveLaptop(trimmed, true, true, true);
+        if (saved) {
+          setNote("This laptop is listening. Leave this page open.");
+          return;
+        }
+        // Python failed — fall through to try Web Bluetooth
+      }
+      // Non-hub (or hub Python failed): use Web Bluetooth — zero install
       if (!window.isSecureContext) {
         setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
         return;
@@ -459,6 +476,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         return;
       }
       if (browserCanWatch()) {
+        adCountRef.current = 0;
         const watched = await listenInPage();
         if (watched === "cancelled") {
           setNote("Pick LanternTag in the list. Make sure LightBlue is running on the phone with LanternTag advertising.");
@@ -466,15 +484,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         }
         if (watched === "watching") {
           const saved = await saveLaptop(trimmed, false, false);
-          if (saved) setNote("LanternTag is selected. Leave this tab open so it keeps hearing the phone.");
-          return;
-        }
-      }
-      // Hub fallback: try the Python listener if Web Bluetooth didn't work
-      if (here) {
-        const saved = await saveLaptop(trimmed, true, true, true);
-        if (saved) {
-          setNote("This laptop is listening. Leave this page open.");
+          if (!saved) return;
+          setNote("Scanning for signal... keep this tab in the foreground.");
+          // Check that ads actually arrive — if not, warn the user
+          const before = adCountRef.current;
+          await new Promise((r) => setTimeout(r, 6000));
+          if (adCountRef.current > before && latest.current && Date.now() - latest.current.at < 8000) {
+            setNote("Connected and hearing the phone. Leave this tab open.");
+          } else {
+            setNote("Paired but not hearing the phone yet. Make sure LightBlue is advertising on the phone, the phone is nearby, and this Chrome tab is in the foreground (not minimised). Try pressing Pair again if no signal appears.");
+          }
           return;
         }
       }
