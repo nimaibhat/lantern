@@ -115,6 +115,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
+  const [awayId, setAwayId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const held = useRef<string | null>(null);
   const savedRoom = useRef<string | null>(null);
@@ -433,7 +434,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       }
       if (here && existingId && previous && existingId !== previous) {
         deviceIdRef.current = previous;
-        setNote(`Open Tracking on the ${trimmed} laptop and press Pair. This computer keeps listening as its own room.`);
+        setAwayId(existingId);
+        setNote(`Pair on the ${trimmed} laptop. This computer is already scanning as ${mineName || "its own room"}.`);
         return;
       }
       const saved = await saveLaptop(trimmed, false, false);
@@ -517,7 +519,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const heardCards = cards.filter((c) => c.reading?.online && (c.reading?.rssi ?? -100) > -100);
   const lead = heardCards.find((c) => c.id === call?.receiverId);
   const others = heardCards.filter((c) => c.id !== call?.receiverId);
-  const shownNote = lead && /looking for the phone|Leave this page open|is listening/.test(note) ? "" : note;
+  const shownNote = lead && /looking for the phone/.test(note) ? "" : note;
   const nameOf = (id: string) => labels[id] || "Unnamed";
   const mineReading = mineId ? readings[mineId] : undefined;
   const mineHears = !!mineReading?.online && (mineReading?.rssi ?? -100) > -100;
@@ -541,6 +543,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const heard = !!c.reading?.online && rssi > -100;
           const silent = !!c.reading && !c.reading.online;
           const pct = heard ? Math.min(100, Math.max(0, ((rssi + 100) / 70) * 100)) : 0;
+          const away = awayId === c.id;
           const isLead = call?.receiverId === c.id;
           return (
             <section key={c.id} className={isLead ? "card track-card lead" : "card track-card"}>
@@ -549,10 +552,10 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
                 <button className="btn ghost small" disabled={busy} onClick={() => remove(c.id)} suppressHydrationWarning>Remove</button>
               </div>
               <h2>{nameOf(c.id)}</h2>
-              <p className="track-dbm">{heard ? Math.round(rssi) : silent ? "No signal" : "Waiting"}</p>
+              <p className="track-dbm">{heard ? Math.round(rssi) : away ? "Not this PC" : silent ? "No signal" : "Waiting"}</p>
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
-              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : heardCards.length > 0 ? "No reading from this laptop" : "Waiting for LanternTag"}</p>
+              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : away ? "Pair on that laptop. This computer is already scanning." : silent ? "Not hearing the phone" : heardCards.length > 0 ? "No reading from this laptop" : "Waiting for LanternTag"}</p>
               {!heard && (
                 <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(c.id, nameOf(c.id))}>
                   Pair
