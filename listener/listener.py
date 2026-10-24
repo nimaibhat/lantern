@@ -17,21 +17,38 @@ import websockets
 SERVICE_UUID = "4c414e54-4552-4e00-a000-000000000001"
 
 
+def dbg(message, data):
+    # #region agent log
+    try:
+        with open("debug-aae308.log", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"sessionId": "aae308", "hypothesisId": "F", "location": "listener.py", "message": message, "data": data, "timestamp": int(time.time() * 1000)}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+
 async def run(a):
     q: asyncio.Queue = asyncio.Queue(maxsize=500)
     last = 0.0
+    shown = 0
+    dbg("listener up", {"id": a.id})
 
     def on_detect(device, adv):
-        nonlocal last
+        nonlocal last, shown
         uuids = [u.lower() for u in (adv.service_uuids or [])]
         # Windows often leaves device.name empty and puts the LightBlue name in the ad itself.
         name = " ".join(p for p in (device.name, getattr(adv, "local_name", None)) if p).lower()
-        if SERVICE_UUID not in uuids and "lantern" not in name:
+        hit = SERVICE_UUID in uuids or "lantern" in name
+        if not hit:
+            if shown < 8 and name:
+                shown += 1
+                dbg("other ad", {"id": a.id, "name": name[:40], "rssi": adv.rssi})
             return
         now = time.time()
         if now - last < a.min_interval:
             return
         last = now
+        dbg("phone seen", {"id": a.id, "name": name[:40], "rssi": adv.rssi})
         try:
             q.put_nowait({
                 "type": "rssi",

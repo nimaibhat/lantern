@@ -55,6 +55,12 @@ $watcher.ScanningMode = [Windows.Devices.Bluetooth.Advertisement.BluetoothLEScan
 $eventInfo = $watcher.GetType().GetEvent("Received")
 $delegate = [Delegate]::CreateDelegate($eventInfo.EventHandlerType, [LanternEar].GetMethod("OnReceived"))
 $token = $watcher.add_Received($delegate)
+$pidFile = Join-Path $env:TEMP "lantern-ear.pid"
+if (Test-Path $pidFile) {
+  $old = Get-Content $pidFile -ErrorAction SilentlyContinue
+  if ($old) { Stop-Process -Id $old -Force -ErrorAction SilentlyContinue }
+}
+Set-Content -Path $pidFile -Value $PID
 try { $watcher.Start() } catch { Write-Output "Turn Bluetooth on for this computer."; exit 1 }
 Write-Output "Listening for LanternTag. Leave this window open."
 $lastPost = [int64]0
@@ -77,4 +83,10 @@ $watcher.remove_Received($token) | Out-Null
 `.trim();
   const command = utf16leBase64(script);
   return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${command}\r\n`;
+}
+
+// Same listener as the bat, started with no window. Each Windows laptop runs its own copy.
+export function earHidden(deviceId: string, postUrl: string, label: string): string {
+  const encoded = earBat(deviceId, postUrl, label).split("-EncodedCommand ")[1]?.trim() ?? "";
+  return `Set shell = CreateObject("Wscript.Shell")\r\nshell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand ${encoded}", 0, False\r\n`;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { earHidden } from "@/lib/sensing/ear-bat";
 import { roughFeet } from "@/lib/sensing/feet";
 import { closestRoom, type Placement, type Reading } from "@/lib/sensing/nearest-room";
 import type { Receiver } from "@/lib/types";
@@ -372,13 +373,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
     setNote("");
     setBusy(true);
+    const previous = deviceIdRef.current;
     if (existingId) deviceIdRef.current = existingId;
     try {
       const bt = bluetooth();
+      const windows = /Win/i.test(navigator.userAgent);
       // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start mac ${/Mac/i.test(navigator.userAgent)} win ${/Win/i.test(navigator.userAgent)} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start mac ${/Mac/i.test(navigator.userAgent)} win ${windows} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
-      const watched = await listenInPage();
+      // Windows Chrome does not deliver the phone's signal. The Mac listens in the page. This computer's hidden listener is separate.
+      const watched = windows ? "unavailable" : await listenInPage();
       // #region agent log
       fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
@@ -391,6 +395,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         if (saved) setNote("Looking for the phone on this laptop. Leave this page open.");
         return;
       }
+      const here = await onHub();
+      setHub(here);
+      if (here && existingId && previous && existingId !== previous) {
+        deviceIdRef.current = previous;
+        setNote(`Open Tracking on the ${trimmed} laptop and press Pair. This computer keeps listening as its own room.`);
+        return;
+      }
       const saved = await saveLaptop(trimmed, false, false);
       const id = deviceIdRef.current;
       if (!saved || !id) return;
@@ -398,10 +409,22 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This laptop is listening. Leave this page open.");
         return;
       }
-      const here = await onHub();
-      setHub(here);
       if (here) {
-        await saveLaptop(trimmed, true, true, false);
+        await saveLaptop(trimmed, true, true, true);
+        return;
+      }
+      if (windows) {
+        const file = new Blob([earHidden(id, `${location.origin}/api/tracking`, trimmed)], { type: "text/vbscript" });
+        const url = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Lantern.vbs";
+        link.click();
+        URL.revokeObjectURL(url);
+        // #region agent log
+        fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch windows-hidden ${id}`, protocol: location.protocol }) }).catch(() => {});
+        // #endregion
+        setNote("Open the Lantern file that downloaded. It stays hidden, and this laptop listens for the phone.");
         return;
       }
       if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
@@ -409,7 +432,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       } else if (/Mac/i.test(navigator.userAgent)) {
         setNote("Open this page in Chrome on the Mac, then press Pair.");
       } else {
-        setNote("This Windows browser cannot hear the phone. Listening runs on the computer where the site is open.");
+        setNote("Open Tracking on that laptop and press Pair.");
       }
     } catch {
       setNote("Could not start listening. Try again.");

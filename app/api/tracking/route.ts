@@ -215,20 +215,27 @@ function killPid(pid: number): Promise<void> {
   });
 }
 
-// One Windows radio can scan. A listener already running is left alone unless this laptop is switching rooms.
+// One Windows radio can scan as one laptop. Pairing a different laptop switches the radio to that name.
 async function listenHere(receiverId: string, replace: boolean): Promise<boolean> {
   const running = earProc();
-  if (running.id === receiverId && running.proc && running.proc.exitCode == null) return true;
   const scanners = await scannerPids();
+  const ids = scanners.map((row) => row.id);
   // #region agent log
-  agentLog("B", "route.ts:listenHere", "scanner check", { receiverId, replace, scanners: scanners.map((row) => row.id) });
+  agentLog("B", "route.ts:listenHere", "scanner check", { receiverId, replace, scanners: ids, tracked: running.id });
   // #endregion
-  if (scanners.some((row) => row.id === receiverId)) return true;
-  // A different laptop already owns this radio. Do not report this name as listening.
-  if (!replace && scanners.length > 0) return false;
-  for (const row of scanners) await killPid(row.pid);
-  if (running.proc?.pid) await killPid(running.proc.pid);
-  return startEar(receiverId);
+  const already = ids.includes(receiverId) || (running.id === receiverId && !!running.proc && running.proc.exitCode == null);
+  if (already && !replace) return true;
+  if (!replace && (ids.length > 0 || running.id)) return false;
+  for (const row of scanners) {
+    if (row.id !== receiverId) await killPid(row.pid);
+  }
+  if (running.proc?.pid && running.id !== receiverId) await killPid(running.proc.pid);
+  if (already) return true;
+  const started = await startEar(receiverId);
+  // #region agent log
+  agentLog("B", "route.ts:listenHere", "scanner started", { receiverId, started });
+  // #endregion
+  return started;
 }
 
 async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean; replace?: boolean }) {
