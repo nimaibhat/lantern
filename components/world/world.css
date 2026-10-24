@@ -1,0 +1,196 @@
+/* 3D live view, zone editor and replay (Nimai). Uses the dashboard's warm tokens when present. */
+
+.w3 {
+  position: relative;
+  height: calc(100vh - 170px);
+  min-height: 520px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1a1714;
+}
+
+.w3-hud {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  pointer-events: none;
+}
+
+.w3-card {
+  pointer-events: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(26, 23, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ebe6de;
+  backdrop-filter: blur(6px);
+}
+
+.w3-room {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+}
+
+.w3-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #b5ab9f;
+}
+
+.w3-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ebe6de;
+}
+
+.w3-chip.sim { border-color: #f5a54a; color: #f5a54a; }
+.w3-chip.ok::before, .w3-chip.bad::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+.w3-chip.ok::before { background: #7fb083; }
+.w3-chip.bad::before { background: #e0664d; }
+
+.w3-sim-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f5a54a;
+  color: #1a1714;
+  font-family: var(--font-mono), monospace;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+
+.w3-tools {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.w3 .w3-btn {
+  color: #ebe6de;
+  text-decoration: none;
+}
+
+.w3-btn {
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(26, 23, 20, 0.82);
+  color: #ebe6de;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.w3 .w3-btn.on { background: #f5a54a; border-color: #f5a54a; color: #1a1714; }
+.w3-btn:disabled { opacity: 0.4; cursor: default; }
+.w3-spacer { flex: 1; }
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono), monospace;
+.w3-note { color: #e0664d; font-size: 0.8rem; pointer-events: auto; }
+
+.w3-label {
+  color: #3b342d;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.w3-predict, .w3-tip {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: #1a1714;
+  color: #f5a54a;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.w3-tip { color: #ebe6de; max-width: 220px; white-space: normal; }
+
+.w3-short { height: calc(100vh - 270px); }
+
+/* Zone editor */
+
+.ze {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.ze-plan {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  background: var(--d-surface, #f5f2ed);
+  border: 1px solid var(--d-border, #d9d2c7);
+  touch-action: none;
+  user-select: none;
+}
+
+.ze-room { fill: var(--d-bg, #ebe6de); stroke: var(--d-text, #3b342d); stroke-width: 2; cursor: move; }
+.ze-room.virtual { stroke-dasharray: 6 4; }
+.ze-room.selected { fill: rgba(201, 119, 42, 0.18); stroke: var(--d-accent, #c9772a); stroke-width: 3; }
+.ze-vertex { fill: var(--d-accent, #c9772a); cursor: grab; }
+.ze-door { fill: #4f7a52; cursor: grab; }
+.ze-anchor { fill: #5c7f9e; cursor: grab; }
+.ze-draft { fill: rgba(201, 119, 42, 0.12); stroke: var(--d-accent, #c9772a); stroke-width: 2; stroke-dasharray: 4 3; }
+.ze-label { font-family: var(--font-mono), monospace; font-size: 10px; fill: var(--d-muted, #7a7067); text-anchor: middle; pointer-events: none; }
+
+.ze-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ze-side label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--d-muted, #7a7067); }
+.ze-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ze-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; font-size: 0.85rem; }
+.ze-list button { all: unset; cursor: pointer; }
+.ze-list .on { color: var(--d-accent, #c9772a); font-weight: 600; }
+
+/* Replay */
+
+.rp-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rp-bar input[type="range"] { flex: 1; min-width: 200px; accent-color: #c9772a; }
+
+@media (max-width: 860px) {
+  .w3 { height: 70vh; min-height: 420px; }
+  .ze { grid-template-columns: 1fr; }
+}

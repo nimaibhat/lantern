@@ -1,0 +1,4 @@
+/* Audit report extras (Nimai). The base styles live in the dashboard stylesheet. */
+.audit .audit-main input { margin-top: 6px; max-width: 420px; font-size: 0.85rem; }
+.print-only { display: none; }
+@media print { .print-only { display: block; } }

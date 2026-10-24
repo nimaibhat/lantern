@@ -1,0 +1,3 @@
+-- 0005_core.sql (owner: Aarnav). Changes to: households, contacts, zone_rules, location_events, risk_events, alerts, patient_state, routines, interventions.
+-- 0001 to 0004 are the shared baseline already applied to the project; never edit them.
+-- Add your changes below, newest at the bottom, and apply them with the Supabase CLI or MCP.
