@@ -63,7 +63,11 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
   useEffect(() => {
     let ws: WebSocket | undefined, retry: ReturnType<typeof setTimeout> | undefined, delay = 1000, stopped = false;
     const connect = () => {
-      ws = new WebSocket(MONITOR_WS);
+      try {
+        ws = new WebSocket(MONITOR_WS);
+      } catch {
+        return; // mixed content (ws:// from https://)
+      }
       ws.onopen = () => {
         delay = 1000;
         setOnline(true);
