@@ -1,0 +1,272 @@
+{
+  "householdId": "h1",
+  "version": 1,
+  "unit": "in",
+  "rooms": [
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "kind": "bedroom",
+      "polygon": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 144,
+          "y": 0
+        },
+        {
+          "x": 144,
+          "y": 144
+        },
+        {
+          "x": 0,
+          "y": 144
+        }
+      ],
+      "centroid": {
+        "x": 72,
+        "y": 72
+      },
+      "heightIn": 96
+    },
+    {
+      "id": "hallway",
+      "name": "Hallway",
+      "kind": "hallway",
+      "polygon": [
+        {
+          "x": 144,
+          "y": 0
+        },
+        {
+          "x": 216,
+          "y": 0
+        },
+        {
+          "x": 216,
+          "y": 288
+        },
+        {
+          "x": 144,
+          "y": 288
+        }
+      ],
+      "centroid": {
+        "x": 180,
+        "y": 144
+      },
+      "heightIn": 96
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "kind": "kitchen",
+      "polygon": [
+        {
+          "x": 216,
+          "y": 0
+        },
+        {
+          "x": 384,
+          "y": 0
+        },
+        {
+          "x": 384,
+          "y": 144
+        },
+        {
+          "x": 216,
+          "y": 144
+        }
+      ],
+      "centroid": {
+        "x": 300,
+        "y": 72
+      },
+      "heightIn": 96
+    },
+    {
+      "id": "bathroom",
+      "name": "Bathroom",
+      "kind": "bathroom",
+      "polygon": [
+        {
+          "x": 0,
+          "y": 144
+        },
+        {
+          "x": 144,
+          "y": 144
+        },
+        {
+          "x": 144,
+          "y": 288
+        },
+        {
+          "x": 0,
+          "y": 288
+        }
+      ],
+      "centroid": {
+        "x": 72,
+        "y": 216
+      },
+      "heightIn": 96
+    },
+    {
+      "id": "tv-room",
+      "name": "TV room",
+      "kind": "tv-room",
+      "polygon": [
+        {
+          "x": 216,
+          "y": 144
+        },
+        {
+          "x": 384,
+          "y": 144
+        },
+        {
+          "x": 384,
+          "y": 288
+        },
+        {
+          "x": 216,
+          "y": 288
+        }
+      ],
+      "centroid": {
+        "x": 300,
+        "y": 216
+      },
+      "heightIn": 96
+    },
+    {
+      "id": "front-door",
+      "name": "Front door",
+      "kind": "front-door",
+      "polygon": [
+        {
+          "x": 144,
+          "y": 288
+        },
+        {
+          "x": 216,
+          "y": 288
+        },
+        {
+          "x": 216,
+          "y": 336
+        },
+        {
+          "x": 144,
+          "y": 336
+        }
+      ],
+      "centroid": {
+        "x": 180,
+        "y": 312
+      },
+      "heightIn": 96
+    }
+  ],
+  "doors": [
+    {
+      "id": "bedroom|hallway",
+      "roomA": "bedroom",
+      "roomB": "hallway",
+      "center": {
+        "x": 144,
+        "y": 72
+      },
+      "widthIn": 34,
+      "kind": "door"
+    },
+    {
+      "id": "bathroom|hallway",
+      "roomA": "bathroom",
+      "roomB": "hallway",
+      "center": {
+        "x": 144,
+        "y": 216
+      },
+      "widthIn": 34,
+      "kind": "door"
+    },
+    {
+      "id": "kitchen|hallway",
+      "roomA": "kitchen",
+      "roomB": "hallway",
+      "center": {
+        "x": 216,
+        "y": 72
+      },
+      "widthIn": 34,
+      "kind": "door"
+    },
+    {
+      "id": "tv-room|hallway",
+      "roomA": "tv-room",
+      "roomB": "hallway",
+      "center": {
+        "x": 216,
+        "y": 216
+      },
+      "widthIn": 34,
+      "kind": "door"
+    },
+    {
+      "id": "hallway|front-door",
+      "roomA": "hallway",
+      "roomB": "front-door",
+      "center": {
+        "x": 180,
+        "y": 288
+      },
+      "widthIn": 34,
+      "kind": "door"
+    }
+  ],
+  "anchors": [
+    {
+      "receiverId": "bedroom",
+      "position": {
+        "x": 72,
+        "y": 72
+      },
+      "heightIn": 36
+    },
+    {
+      "receiverId": "hallway",
+      "position": {
+        "x": 180,
+        "y": 144
+      },
+      "heightIn": 36
+    },
+    {
+      "receiverId": "kitchen",
+      "position": {
+        "x": 300,
+        "y": 72
+      },
+      "heightIn": 36
+    },
+    {
+      "receiverId": "tv-room",
+      "position": {
+        "x": 300,
+        "y": 216
+      },
+      "heightIn": 36
+      "position": {
+        "x": 300,
+        "y": 216
+      },
+      "heightIn": 36
+    }
+  ],
+  "hazards": []
+}

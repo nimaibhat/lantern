@@ -1,0 +1,211 @@
+{
+  "identifier": "225E044A-C0CC-4FD9-B56C-8B9949AF388C",
+  "version": 2,
+  "walls": [
+    {
+      "identifier": "5436263C-B5B3-417B-ACA2-B6406125C67E",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        4.5,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          3.25,
+          0,
+          5,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "7B7D5421-72EF-4DF6-B2A0-B5FE6F9DB0AB",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        4.5,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          3.25,
+          0,
+          5.88,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "5212FE59-A49C-4DD2-BC42-63273F8FFD19",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        0.88,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          5.44,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "1541F940-543F-4458-AE38-52BF6EC334E8",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        0.88,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          5.5,
+          0,
+          5.44,
+          1
+        ]
+      ]
+    }
+  ],
+  "doors": [],
+  "windows": [],
+  "openings": [
+    {
+      "identifier": "6ED6DBDA-81AE-4C25-8ABF-DBA24F449961",
+      "category": {
+        "opening": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        0.85,
+        2.1,
+        0
+      ],
+      "transform": [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          5.5,
+          0,
+          5.44,
+          1
+        ]
+      ]
+    }
+  ],
+  "objects": []
+}

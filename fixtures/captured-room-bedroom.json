@@ -1,0 +1,294 @@
+{
+  "identifier": "799D4D4E-F7FC-4BFF-8719-9715F25F1CE0",
+  "version": 2,
+  "walls": [
+    {
+      "identifier": "C36B969A-D293-4596-B8E0-5EDD2F497906",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        3.6,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          2.8,
+          0,
+          2,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "DFBA9621-B466-4321-ADF0-07044DC9F058",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        3.6,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          2.8,
+          0,
+          5,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "C95B72D5-C4FA-4A03-84BF-3CE5E6F1CB5C",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        3,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          3.5,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "7494EB2E-03DC-4664-A867-48F8FA84B771",
+      "category": {
+        "wall": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        3,
+        2.4,
+        0
+      ],
+      "transform": [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          4.6,
+          0,
+          3.5,
+          1
+        ]
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "identifier": "166889CB-733F-4A29-976E-E3686D804216",
+      "category": {
+        "door": {
+          "isOpen": true
+        }
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        0.76,
+        2.03,
+        0
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          2,
+          0,
+          5,
+          1
+        ]
+      ]
+    }
+  ],
+  "windows": [],
+  "openings": [],
+  "objects": [
+    {
+      "identifier": "2958260A-26D8-4A09-A94F-CBE3C418EA3A",
+      "category": {
+        "bed": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        1.5,
+        0.6,
+        2
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          2,
+          0,
+          3.1,
+          1
+        ]
+      ]
+    },
+    {
+      "identifier": "60D6FA61-301D-490D-86CC-DE95DDAC4151",
+      "category": {
+        "storage": {}
+      },
+      "confidence": {
+        "high": {}
+      },
+      "dimensions": [
+        0.9,
+        1.2,
+        0.5
+      ],
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          4.1,
+          0,
+          2.4,
+          1
+        ]
+      ]
+    }
+  ]
+}
