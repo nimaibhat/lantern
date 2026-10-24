@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BuildStage } from "./build-stage";
 import { createHome, homeProgress, newPairCode, type HomeProgress, type NewHome } from "@/lib/dashboard/homes-actions";
 
 const POLL_MS = 3000;
@@ -64,7 +65,6 @@ export function AddHome({ address }: { address: string }) {
   }, [home, progress?.scan]);
 
   const step = !home ? 1 : !progress || progress.scan === "waiting" ? 2 : 3;
-  const ready = !!progress && progress.rooms > 0;
 
   return (
     <div className="add-home">
@@ -132,26 +132,12 @@ export function AddHome({ address }: { address: string }) {
           {home && (
             <>
               <p>Name each room, walk it slowly along the walls, and take 2 to 4 photos. Scan every room in one go, then tap Upload.</p>
-              <p className="add-status" aria-live="polite">
-                {!progress || progress.scan === "waiting"
-                  ? "Waiting for the upload."
-                  : progress.scan === "failed"
-                    ? "The scan could not be read. Scan again from the app."
-                    : progress.scan === "processing"
-                      ? ready
-                        ? `${progress.rooms} rooms measured and checked. Claude is still looking at the photos.`
-                        : "Upload received. Building the floor plan."
-                      : `${progress.rooms} rooms measured, ${progress.issues} accessibility items, ${progress.photoHazards} hazards in the photos.`}
-              </p>
-              {ready && (
-                <a className="btn" href={`/dashboard/h/${home.id}`}>
-                  Open {home.name}
-                </a>
-              )}
             </>
           )}
         </li>
       </ol>
+
+      {home && <BuildStage name={home.name} progress={progress} homeHref={`/dashboard/h/${home.id}`} />}
     </div>
   );
 }

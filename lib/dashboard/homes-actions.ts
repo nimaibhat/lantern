@@ -3,12 +3,25 @@
 import { myHouseholdIds, rememberHousehold } from "@/lib/households";
 import { createPairCode } from "@/lib/scan/pairing";
 import { db } from "@/lib/supabase/server";
+import type { HomeModel } from "@/lib/types";
+import { getHomeModel } from "@/lib/world/store";
 
 // Add a home (/dashboard/new): create the household, pair the scanning app, then watch the scan arrive.
 // Only the browser that created a home can pair or poll it (its id is in that browser's cookie).
 
 export type NewHome = { id: string; code: string; expiresAt: string };
-export type HomeProgress = { scan: "waiting" | "processing" | "done" | "failed"; rooms: number; issues: number; photoHazards: number };
+export type ScanPhoto = { path: string; url: string; hazard?: string };
+// The build view on /dashboard/new draws from this, so it carries the floor plan and photos, not just counts.
+export type HomeProgress = {
+  scan: "waiting" | "uploading" | "processing" | "done" | "failed";
+  model?: HomeModel; // once the rooms are measured
+  rooms: number;
+  issues: number;
+  photoHazards: number;
+  photos: ScanPhoto[];
+};
+
+const PHOTO_URL_SECONDS = 60 * 60;
 
 const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
@@ -48,17 +61,26 @@ export async function newPairCode(id: string): Promise<NewHome> {
 
 export async function homeProgress(id: string): Promise<HomeProgress> {
   const client = await mine(id);
-  const [{ data: scan }, { count: rooms }, { data: items }] = await Promise.all([
+  const [{ data: scan }, { data: rooms }, { data: items }, { model, saved }] = await Promise.all([
     client.from("scans").select("status").eq("household_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    client.from("rooms").select("id", { count: "exact", head: true }).eq("household_id", id),
-    client.from("audit_items").select("source").eq("household_id", id),
+    client.from("rooms").select("photo_paths").eq("household_id", id),
+    client.from("audit_items").select("source, title, photo_path").eq("household_id", id),
+    getHomeModel(id),
   ]);
-  const status = scan?.status as string | undefined;
-  const sources = (items ?? []).map((i) => i.source as string);
+  const status = scan?.status as HomeProgress["scan"] | undefined;
+  const vision = (items ?? []).filter((i) => i.source === "vision");
+  const flagged = new Map(vision.filter((i) => i.photo_path).map((i) => [i.photo_path as string, i.title as string]));
+
+  const paths = (rooms ?? []).flatMap((r) => (r.photo_paths as string[] | null) ?? []);
+  const { data: signed } = paths.length ? await client.storage.from("photos").createSignedUrls(paths, PHOTO_URL_SECONDS) : { data: [] };
+  const photos = (signed ?? []).flatMap((d) => (d.signedUrl && d.path ? [{ path: d.path, url: d.signedUrl, hazard: flagged.get(d.path) }] : []));
+
   return {
-    scan: !status ? "waiting" : status === "done" || status === "failed" ? status : "processing",
-    rooms: rooms ?? 0,
-    issues: sources.filter((s) => s !== "vision").length,
-    photoHazards: sources.filter((s) => s === "vision").length,
+    scan: status ?? "waiting",
+    model: saved && model.rooms.length > 0 ? model : undefined,
+    rooms: rooms?.length ?? 0,
+    issues: (items ?? []).length - vision.length,
+    photoHazards: vision.length,
+    photos,
   };
 }

@@ -15,6 +15,7 @@ import { getHomeModel, hazardsFrom, saveHomeModel, syncHazards } from "@/lib/wor
 //   2. build the HomeModel (slug room ids, doors matched to rooms, listener anchors carried over) and save it
 //   3. run the accessibility rules and the walker and wheelchair route checks right away
 //   4. run the Claude photo check after responding, since it takes a few seconds per room
+//   5. (off for now) for the demo home, start a World Labs 3D preview per room (each one is a paid call)
 //
 // POST { code } -> { rooms, accessibilityItems, version }
 
@@ -105,6 +106,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         await supabase.from("scans").update({ status: "failed" }).eq("id", scanId);
       }
     });
+
+    // 5. One World Labs world per room. A world is one continuous space built around a viewpoint from up to four
+    //    photos, so a whole-home world would blend the rooms together; the floor plan is the whole-home view.
+    //    All photos are uploaded before this route is called, so the jobs can start now.
+    //    Off for now to save World Labs credits; start previews by hand from each room page until this is turned back on.
+    // if (hid === HOUSEHOLD_ID && worldLabsConfigured)
+    //   after(async () => {
+    //     const started = await Promise.allSettled(home.rooms.map((r) => startRoomPreview(r.id, hid)));
+    //     const failed = started.filter((s) => s.status === "rejected");
+    //     if (failed.length) console.error(`World Labs: ${failed.length} of ${started.length} previews did not start:`, (failed[0] as PromiseRejectedResult).reason?.message);
+    //   });
 
     return Response.json({ rooms: home.rooms.length, accessibilityItems: ruleItems.length, version: savedModel.version });
   } catch (e) {

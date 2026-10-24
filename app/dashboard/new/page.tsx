@@ -2,7 +2,9 @@ import { networkInterfaces } from "node:os";
 import { headers } from "next/headers";
 import Link from "next/link";
 import "../_homes/homes.css";
+import { demoHome } from "@/lib/world/store";
 import { AddHome } from "./add-home";
+import { BuildPreview } from "./build-preview";
 
 // /dashboard/new: add a home, pair the Lantern app, watch the scan arrive.
 
@@ -19,7 +21,8 @@ async function siteAddress(): Promise<string> {
   return lan ? `http://${lan.address}:${port}` : `http://${host}`;
 }
 
-export default async function NewHomePage() {
+export default async function NewHomePage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
+  const preview = process.env.NODE_ENV === "development" && (await searchParams).preview === "1";
   return (
     <div className="new-home">
       <header className="homes-top">
@@ -30,7 +33,7 @@ export default async function NewHomePage() {
           All homes
         </Link>
       </header>
-      <AddHome address={await siteAddress()} />
+      {preview ? <BuildPreview model={demoHome} name="The sample home" /> : <AddHome address={await siteAddress()} />}
     </div>
   );
 }
