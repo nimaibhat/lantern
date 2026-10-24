@@ -13,7 +13,7 @@ certificates/
 
 # Next.js build output
 .next/
-out/
+/out/
 build/
 dist/
 next-env.d.ts
