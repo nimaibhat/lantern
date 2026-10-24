@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE Hub Test</title>
+<style>
+  :root {
+    --bg: #f6f4f1; --card: #ffffff; --fg: #1d1b19; --muted: #6f6861; --line: #e4dfd8;
+    --strong: #2f7d4f; --weak: #c9c2b8; --warn: #b4532a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171614; --card: #211f1c; --fg: #f3efe9; --muted: #a39a90; --line: #34302b; --strong: #5cc489; --weak: #4a453f; --warn: #e48a5f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; }
+  .room { font-size: clamp(32px, 8vw, 56px); font-weight: 700; margin: 4px 0 0; }
+  .why { margin: 6px 0 0; }
+  .device { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .device:first-of-type { border-top: 0; }
+  .name { font-weight: 600; }
+  .dbm { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .bar { grid-column: 1 / -1; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--weak); transition: width .3s; }
+  .device.winner .bar span { background: var(--strong); }
+  .meta { grid-column: 1 / -1; font-size: 13px; }
+  .off { color: var(--warn); }
+  form { display: grid; gap: 10px; }
+  label { display: grid; gap: 4px; font-size: 14px; }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); width: 100%; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--fg); color: var(--bg); cursor: pointer; }
+  button.ghost { background: transparent; color: var(--fg); }
+  .status { font-size: 14px; }
+  .toggle { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; }
+  .toggle input { width: auto; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button { padding: 5px 12px; font-size: 14px; }
+  .actions button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<main>
+  <h1>BLE Hub Test</h1>
+  <p class="muted">Every laptop sends how loud it hears the beacon. The loudest one names the room.</p>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <p class="muted status" id="status" style="margin:0">Connecting...</p>
+      <button type="button" class="ghost" id="fake">Try with fake data</button>
+    </div>
+    <p class="muted" style="margin:12px 0 0">Phone is in</p>
+    <p class="room" id="room">-</p>
+    <p class="muted why" id="why">Waiting for readings.</p>
+    <p class="muted why" id="other"></p>
+    <label class="toggle"><input type="checkbox" id="useCal" checked> Use calibration</label>
+  </section>
+
+  <section class="card">
+    <p class="muted" id="calStatus" style="margin:0 0 8px">Calibrate: hold the phone against a device, then press its Calibrate button. About 7 seconds each.</p>
+    <div id="devices"><p class="muted" id="empty">No devices yet. Start hub_sender.py on each laptop.</p></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+  // Same broker and topic as hub_sender.py. The broker is public: only room names and dBm go through it.
+  const BROKER_WS = "wss://broker.emqx.io:8084/mqtt";
+  const TOPIC = "lantern-ble-test/kc5mv2wkvs";
+  const OFFLINE_MS = 5000;   // no message for 5 s = device offline
+  const MARGIN_DB = 5;       // same as Saran's nearest-room code: switch only when clearly louder
+  const NO_SIGNAL = -100;
+  const CAL_SETTLE_MS = 2000; // ignore the first 2 s: the sender's readings still include before the phone arrived
+  const CAL_COLLECT_MS = 5000;
+  const CAL_MIN_SAMPLES = 3;
+
+  const devices = new Map(); // id -> { rssi, samples, seen }
+  const refs = new Map();    // id -> dBm this device hears with the phone held against it
+  const rooms = { cal: null, raw: null }; // the current room under each method, each with its own hold
+  let calibrating = null;    // { id, start, samples: [] }
+  let client = null;
+
+  const $ = (id) => document.getElementById(id);
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+  const isFake = (id) => id.endsWith("(fake)");
+
+  function onReading(p) {
+    if (!p || typeof p.device !== "string") return;
+    const rssi = typeof p.rssi === "number" ? p.rssi : null;
+    devices.set(p.device, { rssi, samples: p.samples ?? 0, seen: Date.now() });
+    if (calibrating && calibrating.id === p.device && rssi !== null && Date.now() - calibrating.start >= CAL_SETTLE_MS) {
+      calibrating.samples.push(rssi);
+    }
+  }
+
+  // Calibrated score: 0 means "as loud as touching this device", -20 means 20 dB quieter than that.
+  // This cancels out one laptop simply having a stronger antenna than another.
+  function score(id, d, useCal) {
+    return useCal && refs.has(id) ? d.rssi - refs.get(id) : d.rssi;
+  }
+
+  // Loudest online device wins, but the current room holds until another is MARGIN_DB louder.
+  function decide(now, useCal) {
+    const key = useCal ? "cal" : "raw";
+    const unit = useCal ? "dB" : "dBm";
+    const live = [...devices]
+      .filter(([, d]) => now - d.seen < OFFLINE_MS && d.rssi !== null)
+      .map(([id, d]) => [id, score(id, d, useCal)])
+      .sort((a, b) => b[1] - a[1]);
+    if (live.length === 0) { rooms[key] = null; return "No online device hears the beacon."; }
+    const [bestId, best] = live[0];
+    const current = live.find(([id]) => id === rooms[key]);
+    if (!current) { rooms[key] = bestId; return `${bestId} hears it loudest (${best} ${unit}).`; }
+    if (bestId !== rooms[key] && best >= current[1] + MARGIN_DB) {
+      rooms[key] = bestId;
+      return `Switched: ${bestId} is ${best - current[1]} dB louder.`;
+    }
+    if (bestId !== rooms[key]) return `Holding ${rooms[key]}: ${bestId} is louder but not by ${MARGIN_DB} dB yet.`;
+    return live[1] ? `${bestId} is ${best - live[1][1]} dB louder than the next device.` : `Only ${bestId} hears it.`;
+  }
+
+  // One row per device, built once so its buttons keep working while the numbers update.
+  const rows = new Map();
+  function rowFor(id) {
+    if (rows.has(id)) return rows.get(id);
+    $("empty")?.remove();
+    const el = document.createElement("div");
+    el.className = "device";
+    el.innerHTML = `<span class="name"></span><span class="dbm"></span>
+      <div class="bar"><span></span></div>
+      <span class="meta muted state"></span>
+      <span class="meta muted calinfo"></span>
+      <div class="actions"><button type="button" class="ghost cal">Calibrate</button><button type="button" class="ghost clear">Clear</button></div>`;
+    el.querySelector(".name").textContent = id;
+    el.querySelector(".cal").addEventListener("click", () => startCalibration(id));
+    el.querySelector(".clear").addEventListener("click", () => setRef(id, null, true));
+    // Keep rows in name order.
+    const after = [...rows.keys()].sort().find((k) => k > id);
+    $("devices").insertBefore(el, after ? rows.get(after).el : null);
+    const row = { el, dbm: el.querySelector(".dbm"), bar: el.querySelector(".bar span"), state: el.querySelector(".state"),
+                  calinfo: el.querySelector(".calinfo"), cal: el.querySelector(".cal"), clear: el.querySelector(".clear") };
+    rows.set(id, row);
+    return row;
+  }
+
+  function render() {
+    const now = Date.now();
+    const useCal = $("useCal").checked;
+    const why = decide(now, useCal);
+    decide(now, !useCal); // keep the other method's room up to date for the comparison line
+    const room = rooms[useCal ? "cal" : "raw"], other = rooms[useCal ? "raw" : "cal"];
+    $("room").textContent = room ?? "-";
+    $("why").textContent = why;
+    $("other").textContent = refs.size === 0 ? "No device is calibrated yet."
+      : `${useCal ? "Without" : "With"} calibration it would say: ${other ?? "-"}${other === room ? " (same)" : " (different)"}`;
+
+    for (const [id, d] of devices) {
+      const r = rowFor(id);
+      const online = now - d.seen < OFFLINE_MS;
+      const heard = online && d.rssi !== null;
+      const rssi = heard ? d.rssi : NO_SIGNAL;
+      r.el.classList.toggle("winner", id === room);
+      r.dbm.textContent = heard ? `${d.rssi} dBm` : "---";
+      r.bar.style.width = Math.max(0, Math.min(100, ((rssi + 100) / 70) * 100)) + "%";
+      r.state.innerHTML = !online ? `<span class="off">offline</span> (last heard ${((now - d.seen) / 1000).toFixed(1)}s ago)`
+        : d.rssi === null ? "online, no beacon heard" : `online, ${d.samples} packets in 2s`;
+      r.calinfo.textContent = !refs.has(id) ? "Not calibrated"
+        : `Touching level ${refs.get(id)} dBm${heard ? `, now ${Math.abs(d.rssi - refs.get(id))} dB ${d.rssi >= refs.get(id) ? "above" : "below"} that` : ""}`;
+      r.cal.disabled = !!calibrating || !online;
+      r.clear.disabled = !!calibrating || !refs.has(id);
+    }
+    tickCalibration(now);
+  }
+
+  function startCalibration(id) {
+    calibrating = { id, start: Date.now(), samples: [] };
+  }
+
+  function tickCalibration(now) {
+    if (!calibrating) return;
+    const { id, start, samples } = calibrating;
+    const left = Math.ceil((CAL_SETTLE_MS + CAL_COLLECT_MS - (now - start)) / 1000);
+    if (left > 0) {
+      $("calStatus").textContent = `Hold the phone against ${id} and keep it still... ${left}s (${samples.length} readings)`;
+      return;
+    }
+    calibrating = null;
+    if (samples.length < CAL_MIN_SAMPLES) {
+      $("calStatus").textContent = `Not enough readings from ${id}. Is its sender running and the phone right next to it? Try again.`;
+      return;
+    }
+    setRef(id, median(samples), true);
+    $("calStatus").textContent = `${id} calibrated: touching level is ${refs.get(id)} dBm. Do the next device the same way.`;
+  }
+
+  // Share calibration through the broker (retained), so every open hub page uses the same numbers.
+  function setRef(id, value, share) {
+    if (value === null) refs.delete(id); else refs.set(id, value);
+    if (share && client && !isFake(id)) {
+      client.publish(`${TOPIC}/cal/${id}`, value === null ? "" : JSON.stringify({ device: id, ref: value }), { retain: true });
+    }
+  }
+
+  function connect() {
+    if (!window.mqtt) { $("status").textContent = "Could not load the MQTT library. Check the internet connection."; return; }
+    client = window.mqtt.connect(BROKER_WS, { clientId: "hub-page-" + Math.random().toString(16).slice(2, 10), reconnectPeriod: 2000 });
+    client.on("connect", () => {
+      client.subscribe([TOPIC + "/+", TOPIC + "/cal/+"]);
+      $("status").textContent = "Connected to the hub. Listening for laptops.";
+    });
+    client.on("reconnect", () => ($("status").textContent = "Reconnecting..."));
+    client.on("error", (e) => ($("status").textContent = "Connection problem: " + e.message));
+    client.on("message", (topic, msg) => {
+      const text = msg.toString();
+      if (topic.startsWith(TOPIC + "/cal/")) {
+        const id = topic.slice((TOPIC + "/cal/").length);
+        if (!text) return setRef(id, null, false);
+        try { const c = JSON.parse(text); if (typeof c.ref === "number") setRef(id, c.ref, false); } catch {}
+        return;
+      }
+      try { onReading(JSON.parse(text)); } catch {}
+    });
+  }
+
+  // Two pretend laptops with the phone walking between them, to check the page before any setup.
+  let fakeTimer = null;
+  $("fake").addEventListener("click", () => {
+    if (fakeTimer) { clearInterval(fakeTimer); fakeTimer = null; $("status").textContent = "Fake data stopped."; return; }
+    $("status").textContent = "Showing fake data (click again to stop).";
+    const t0 = Date.now();
+    fakeTimer = setInterval(() => {
+      const x = (Math.sin((Date.now() - t0) / 6000) + 1) / 2; // 0 = at bedroom, 1 = at living room
+      const noise = () => Math.round(Math.random() * 4 - 2);
+      // The fake bedroom laptop has a stronger antenna (+8 dB), so uncalibrated it wins too often.
+      onReading({ device: "bedroom (fake)", rssi: Math.round(-37 - 35 * x) + noise(), samples: 9 });
+      onReading({ device: "living-room (fake)", rssi: Math.round(-80 + 35 * x) + noise(), samples: 9 });
+    }, 500);
+  });
+
+  connect();
+  setInterval(render, 300);
+</script>
+</body>
+</html>
