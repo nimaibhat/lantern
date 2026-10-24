@@ -90,10 +90,6 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
     onHub().then((here) => {
       setHub(here);
-      const hostLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-      // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal, pairShown: true }) }).catch(() => {});
-      // #endregion
       // This computer hears in a hidden listener. Opening the page keeps that going.
       if (here && saved && name) {
         fetch("/api/tracking", {
@@ -287,19 +283,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setNote("");
     setBusy(true);
     if (existingId) deviceIdRef.current = existingId;
-    const mac = /Mac/i.test(navigator.userAgent);
-    const win = /Windows/i.test(navigator.userAgent);
-    const canWatch = browserCanWatch();
-    // #region agent log
-    fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: location.hostname === "localhost" || location.hostname === "127.0.0.1", pairShown: true, error: `pair-start mac ${mac} win ${win} watch ${canWatch}`, protocol: location.protocol }) }).catch(() => {});
-    fetch("http://127.0.0.1:7903/ingest/78803543-27d2-4cbb-972a-636f029ea059", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "aae308" }, body: JSON.stringify({ sessionId: "aae308", hypothesisId: "A", location: "tracker.tsx:pairLaptop", message: "pair start", data: { mac, win, canWatch, protocol: location.protocol }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     try {
       const watched = await listenInPage();
-      // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: location.hostname === "localhost" || location.hostname === "127.0.0.1", pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
-      fetch("http://127.0.0.1:7903/ingest/78803543-27d2-4cbb-972a-636f029ea059", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "aae308" }, body: JSON.stringify({ sessionId: "aae308", hypothesisId: "B", location: "tracker.tsx:pairLaptop", message: "pair branch", data: { watched, mac, canWatch }, timestamp: Date.now() }) }).catch(() => {});
-      // #endregion
       if (watched === "cancelled") {
         setNote("Pick LanternTag in the list.");
         return;

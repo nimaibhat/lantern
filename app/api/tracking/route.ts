@@ -1,18 +1,7 @@
-import { appendFileSync } from "node:fs";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import os from "os";
 import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
-
-function agentLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  const line = JSON.stringify({ sessionId: "aae308", hypothesisId, location, message, data, timestamp: Date.now() }) + "\n";
-  try { appendFileSync("debug-aae308.log", line); } catch { /* the ingest copy below still records it */ }
-  fetch("http://127.0.0.1:7903/ingest/78803543-27d2-4cbb-972a-636f029ea059", { method: "POST", headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "aae308" }, body: JSON.stringify({ sessionId: "aae308", hypothesisId, location, message, data, timestamp: Date.now() }) }).catch(() => {});
-  // #endregion
-}
-
-let lastSnap = 0;
 
 // Caregiver placement and the live trail: which device is in which room,
 // the latest dBm, and a line each time the phone's room changes.
@@ -149,14 +138,6 @@ export async function GET() {
     online: now - ear.at < HEAR_FRESH_MS && ear.rssi > -100,
   }));
   const receivers = (data ?? []).map((r) => ({ id: r.id as string, label: r.label as string, roomId: (r.room_id as string | null) ?? "" }));
-  const snapAt = Date.now();
-  if (snapAt - lastSnap >= 3000) {
-    lastSnap = snapAt;
-    agentLog("C", "app/api/tracking/route.ts:GET", "hub snapshot", {
-      receivers: receivers.filter((r) => r.id.startsWith("ear-")).map((r) => r.label),
-      devices: devices.map((d) => ({ id: d.id, rssi: d.rssi, ageMs: d.ageMs, online: d.online })),
-    });
-  }
   return Response.json({ devices, receivers, shareUrl: share });
 }
 
@@ -167,16 +148,6 @@ export async function POST(request: Request) {
   if (!db) return Response.json({ error: "Supabase is not configured." }, { status: 503 });
   if (body.action === "join") return join(body);
   if (body.action === "hear") return hear(body);
-  if (body.action === "view") {
-    agentLog("H1", "app/api/tracking/route.ts:view", "page view", {
-      hub: !!body.hub,
-      hostLocal: !!body.hostLocal,
-      pairShown: !!body.pairShown,
-      error: typeof body.error === "string" ? body.error.slice(0, 180) : "",
-      protocol: body.protocol === "https:" || body.protocol === "http:" ? body.protocol : "",
-    });
-    return Response.json({ ok: true });
-  }
   if (body.action === "place") return place(body);
   if (body.action === "remove") return remove(body);
   if (body.action === "sample") return sample(body);
@@ -267,11 +238,10 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
     { onConflict: "id" },
   );
   if (error) {
-    agentLog("A", "app/api/tracking/route.ts:join", "join failed", { label, error: error.message });
+    console.error("Could not save a laptop:", error.message);
     return Response.json({ error: "Could not save that device." }, { status: 500 });
   }
   const listening = body.listen && body.hub ? await listenHere(receiverId, !!body.replace) : false;
-  agentLog("A", "app/api/tracking/route.ts:join", "laptop joined", { deviceId: receiverId, label, listen: !!body.listen, hub: !!body.hub, listening });
   return Response.json({ ok: true, deviceId: receiverId, label, listening });
 }
 
@@ -279,15 +249,11 @@ async function hear(body: { deviceId?: string; rssi?: number }) {
   const deviceId = (body.deviceId ?? "").trim();
   const rssi = body.rssi;
   if (!SLUG.test(deviceId) || typeof rssi !== "number" || !Number.isFinite(rssi) || rssi <= -100 || rssi > 20) {
-    agentLog("B", "app/api/tracking/route.ts:hear", "hear rejected", { deviceId, rssiType: typeof rssi });
     return Response.json({ error: "Unknown device." }, { status: 400 });
   }
 
   const { data } = await db!.from("receivers").select("id").eq("id", deviceId).eq("household_id", HOUSEHOLD_ID).maybeSingle();
-  if (!data) {
-    agentLog("B", "app/api/tracking/route.ts:hear", "hear unknown laptop", { deviceId });
-    return Response.json({ error: "Unknown device." }, { status: 404 });
-  }
+  if (!data) return Response.json({ error: "Unknown device." }, { status: 404 });
 
   const now = Date.now();
   const rounded = Math.round(rssi);
@@ -301,10 +267,9 @@ async function hear(body: { deviceId?: string; rssi?: number }) {
       last_seen_at: new Date(now).toISOString(),
     }).eq("id", deviceId).eq("household_id", HOUSEHOLD_ID);
     if (error) {
-      agentLog("B", "app/api/tracking/route.ts:hear", "hear save failed", { deviceId, error: error.message });
+      console.error("Could not save a laptop signal:", error.message);
       return Response.json({ error: "Could not save that signal." }, { status: 500 });
     }
-    agentLog("D", "app/api/tracking/route.ts:hear", "signal saved", { deviceId, rssi: rounded });
   }
   return Response.json({ ok: true });
 }
