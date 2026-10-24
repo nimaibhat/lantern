@@ -6,7 +6,15 @@
 import type { Vec2 } from "@/lib/types";
 
 export const IN_PER_M = 39.3701;
+export const IN_PER_FT = 12;
 export const metersToInches = (m: number) => m * IN_PER_M;
+
+// Inches as feet and inches for people: 143.7 is 12′, not 11′12″ (round the total before splitting it)
+export function ftIn(inches: number): string {
+  const total = Math.round(Math.abs(inches));
+  const ft = Math.floor(total / IN_PER_FT), rest = total % IN_PER_FT;
+  return ft === 0 ? `${rest}″` : rest ? `${ft}′${rest}″` : `${ft}′`;
+}
 
 export function colMajor(t: unknown): number[] {
   const m = (Array.isArray(t) ? (Array.isArray(t[0]) ? (t as number[][]).flat() : t) : []) as number[];

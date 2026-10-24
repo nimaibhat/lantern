@@ -33,19 +33,33 @@ function clearanceAt(room: HomeRoom, p: Vec2): number {
   return Math.min(toWalls, toObjects);
 }
 
+// Doors are checked once, from roomA, so a shared door is not reported twice. A doorless opening has no
+// leaf or stops in the way, so its measured width is its clear width.
 export function doorWidths(room: HomeRoom, home: HomeModel): AuditDraft[] {
   return home.doors
+    .filter((d) => d.roomA === room.id)
     .flatMap((d): AuditDraft[] => {
+      const clear = d.kind === "door" ? d.widthIn - DOOR_FRAME_ALLOWANCE : d.widthIn;
       if (clear >= DOOR_MIN + NEAR_LIMIT_IN) return [];
       const other = home.rooms.find((x) => x.id === d.roomB)?.name ?? "outside";
+      const what = d.kind === "door" ? "Door" : "Opening";
+      if (d.kind === "opening" && clear < DOOR_MIN) {
         return [{
           roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: clear <= DOOR_MIN - 4 ? "high" : "medium", location: d.center,
+          title: `${what} between ${room.name} and ${other} is narrow`,
+          detail: `The opening is ${r(clear)} in wide, below the ${DOOR_MIN} in a walker or wheelchair needs.${verify(clear, DOOR_MIN)}`,
+          fix: "Widen the opening or clear trim and anything stored beside it.",
           measuredIn: r(clear), requiredIn: DOOR_MIN,
         }];
       }
       if (clear >= DOOR_MIN) {
         return [{
           roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: "low", location: d.center,
+          title: `${what} between ${room.name} and ${other} is at the limit`,
+          detail: `${d.kind === "door" ? "Estimated clear width" : "The opening"} is ${r(clear)} in, just over the ${DOOR_MIN} in minimum.${verify(clear, DOOR_MIN)}`,
+          fix: d.kind === "door"
+            ? "Measure the opening with the door open 90 degrees; offset hinges add about 2 in if needed."
+            : "Measure the narrowest point of the opening, trim included.",
           measuredIn: r(clear), requiredIn: DOOR_MIN,
         }];
       }
@@ -98,15 +112,26 @@ export function routeWidth(room: HomeRoom, home: HomeModel): AuditDraft[] {
   }];
 }
 
+// Largest clear circle inside the room, clear of walls and furniture: a 4 in grid, then finer searches around
+// the best point (1 in, then 1/4 in), so the reported diameter is within about half an inch of the true one.
 export function largestClearCircle(room: HomeRoom): { diameter: number; at: Vec2 } {
   const b = bounds(room.polygon);
   let best = { diameter: 0, at: b.center };
+  const search = (x0: number, x1: number, y0: number, y1: number, step: number) => {
+    for (let x = x0; x <= x1; x += step) {
+      for (let y = y0; y <= y1; y += step) {
         const p = { x, y };
         if (!pointInPolygon(p, room.polygon)) continue;
         const d = clearanceAt(room, p) * 2;
         if (d > best.diameter) best = { diameter: d, at: p };
       }
     }
+  };
+  search(b.minX, b.maxX, b.minY, b.maxY, 4);
+  for (const [span, step] of [[4, 1], [1, 0.25]]) {
+    const { x, y } = best.at;
+    search(x - span, x + span, y - span, y + span, step);
+  }
   return best;
 }
 

@@ -34,6 +34,46 @@ function clockwise(poly: Vec2[]): Vec2[] {
   return signed < 0 ? [...poly].reverse() : poly;
 }
 
+// RoomPlan's world axes follow the phone at the start of the scan, not the house, so a real scan is usually
+// turned by some angle. The wall direction (length-weighted, modulo 90 degrees) tells us by how much.
+// Radians in (-45, 45] degrees; 0 when there is nothing to measure.
+export function wallAngle(rooms: ParsedRoom[]): number {
+  let sx = 0, sy = 0;
+  for (const r of rooms) {
+    const segs: [Vec2, Vec2][] = r.walls.length
+      ? r.walls.map((w) => [w.start, w.end])
+      : r.polygon.map((p, i) => [p, r.polygon[(i + 1) % r.polygon.length]]);
+    for (const [a, b] of segs) {
+      const len = distance(a, b);
+      if (len < 1) continue;
+      const k = 4 * Math.atan2(b.y - a.y, b.x - a.x); // x4 folds the four wall directions onto one
+      sx += len * Math.cos(k);
+      sy += len * Math.sin(k);
+    }
+  }
+  return Math.hypot(sx, sy) < 1e-6 ? 0 : Math.atan2(sy, sx) / 4;
+}
+
+// Turn every room by -angle about the origin. Rigid, so every length and width is unchanged.
+export function rotateRooms(rooms: ParsedRoom[], angle: number): ParsedRoom[] {
+  if (angle === 0) return rooms;
+  const c = Math.cos(-angle), s = Math.sin(-angle), deg = (angle * 180) / Math.PI;
+  const rt = (p: Vec2) => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c });
+  const rtSeg = <T extends { start: Vec2; end: Vec2 }>(seg: T): T => ({ ...seg, start: rt(seg.start), end: rt(seg.end) });
+  return rooms.map((r) => ({
+    ...r,
+    polygon: r.polygon.map(rt),
+    walls: r.walls.map(rtSeg),
+    openings: r.openings.map(rtSeg),
+    windows: r.windows.map(rtSeg),
+    objects: r.objects.map((o) => ({ ...o, center: rt(o.center), rotationDeg: o.rotationDeg - deg })),
+  }));
+}
+
+// Rooms scanned in one session share a world origin. Square them to the plan axes (so clearances measured
+// along x and y are true), then shift them together so the plan starts at (0, 0).
+export function normalize(parsed: ParsedRoom[]): ParsedRoom[] {
+  const rooms = rotateRooms(parsed, wallAngle(parsed));
   const pts = rooms.flatMap((r) => [...r.polygon, ...r.walls.flatMap((w) => [w.start, w.end])]);
   if (pts.length === 0) return rooms;
   const dx = Math.min(...pts.map((p) => p.x)), dy = Math.min(...pts.map((p) => p.y));
@@ -60,15 +100,27 @@ function uniqueIds(names: string[], taken: Set<string> = new Set()): string[] {
   });
 }
 
+// Doors seen from either side are merged, then matched to the nearest one or two rooms. Two detections of one
+// door are two measurements of the same opening, so the width is their mean (the larger could hide a narrow door).
 export function matchDoors(rooms: HomeRoom[], openings: { center: Vec2; widthIn: number; kind: "door" | "opening" }[]): HomeDoor[] {
+  const merged: ((typeof openings)[number] & { n: number })[] = [];
   for (const o of openings) {
     const same = merged.find((m) => distance(m.center, o.center) < DOOR_MERGE_IN);
+    if (!same) merged.push({ ...o, n: 1 });
+    else {
+      same.widthIn = (same.widthIn * same.n + o.widthIn) / (same.n + 1);
+      same.n++;
+      if (o.kind === "door") same.kind = "door"; // a leaf seen from either side means there is a door
+    }
   }
 
   const doors: HomeDoor[] = [];
   for (const o of merged) {
+    // A door in a shared wall is about 0 in from both rooms; break near-ties by scan order so roomA is stable
     const near = rooms
+      .map((r, i) => ({ id: r.id, i, d: pointInPolygon(o.center, r.polygon) ? 0 : distance(o.center, nearestPointInPolygon(o.center, r.polygon)) }))
       .filter((x) => x.d < DOOR_MATCH_IN)
+      .sort((a, b) => (Math.abs(a.d - b.d) < 0.5 ? a.i - b.i : a.d - b.d));
     if (near.length === 0) continue;
     const roomA = near[0].id, roomB = near[1]?.id ?? "outside";
     let id = `${roomA}|${roomB}`, n = 2;
