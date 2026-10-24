@@ -486,18 +486,26 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
           setNote("Scanning for signal... keep this tab in the foreground.");
-          // Check that ads actually arrive — if not, warn the user
+          // Check that ads actually arrive — if not, fall back to .bat
           const before = adCountRef.current;
           await new Promise((r) => setTimeout(r, 6000));
           if (adCountRef.current > before && latest.current && Date.now() - latest.current.at < 8000) {
             setNote("Connected and hearing the phone. Leave this tab open.");
-          } else {
-            setNote("Paired but not hearing the phone yet. Make sure LightBlue is advertising on the phone, the phone is nearby, and this Chrome tab is in the foreground (not minimised). Try pressing Pair again if no signal appears.");
+            return;
           }
+          // Web Bluetooth isn't delivering signal — offer the .bat listener
+          setLaunchId(deviceIdRef.current);
+          setNote("Chrome paired but can't read the signal on this laptop. Click \"Open listener\" below to download a small file — open it and leave the window running.");
           return;
         }
       }
-      setNote("Chrome could not scan for Bluetooth devices. Make sure Bluetooth is on in Windows Settings, and that you are using Google Chrome (not Edge). Then press Pair again.");
+      // Web Bluetooth not available at all — save device and show .bat download
+      {
+        const saved = await saveLaptop(trimmed, false, false);
+        if (!saved) return;
+        setLaunchId(deviceIdRef.current);
+        setNote("Click \"Open listener\" below to download a small file. Open it and leave the window running — it will scan Bluetooth and send the signal to the hub.");
+      }
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {
