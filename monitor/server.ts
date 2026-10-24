@@ -64,6 +64,7 @@ function toLive<K extends BusEvent>(event: K, p: BusEvents[K]): LiveFrame | unde
     }
     case "patient": {
       const e = p as BusEvents["patient"];
+      return { t: "patient", ts: Date.parse(e.updatedAt) || now, mode: e.mode, message: e.message, photoPath: e.photoPath, voicePath: e.voicePath, riskEventId: e.riskEventId };
     }
   }
 }
@@ -88,12 +89,17 @@ export async function startMonitor(cfg: Config) {
   };
 
   bus.on("location", (e) => (store.room = e.roomId));
+  bus.on("patient", (p) => {
+    store.patient = p.mode;
+    store.patientState = p;
+  });
 
   ctx.http.get("/health", () => ({
     ok: true,
     uptimeS: Math.round((Date.now() - started) / 1000),
     listeners: store.listeners,
     tagLastSeen: store.tagLastSeen ?? null,
+    tagOnline: store.tagOnline ?? false,
   }));
 
   // Emit any bus event by hand. This is how the web, 3D view and responder are tested without Bluetooth.
@@ -198,6 +204,7 @@ export async function startMonitor(cfg: Config) {
   });
 
   live.on("connection", (ws) => {
+    const snapshot: LiveFrame = { t: "snapshot", ts: Date.now(), home: ctx.world(), room: store.room, patient: store.patient, patientState: store.patientState, listeners: store.listeners };
     ws.send(JSON.stringify(snapshot));
   });
 
@@ -205,10 +212,35 @@ export async function startMonitor(cfg: Config) {
     const msg = JSON.stringify(frame);
     for (const ws of live.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
+
+  // Positions are capped at 5 Hz, but the newest one is never dropped: one that lands inside the gap is held and
+  // sent when the gap ends. Dropping it lost sim moves (a drop 170 ms after a BLE frame vanished) and made the
+  // 5 Hz stream stutter whenever two frames arrived a few ms closer than 200 ms.
+  let lastPositionAt = 0;
+  let heldPosition: LiveFrame | undefined;
+  let positionTimer: ReturnType<typeof setTimeout> | undefined;
+  const sendPosition = (frame: LiveFrame) => {
+    lastPositionAt = Date.now();
+    broadcast(frame);
+  };
+  const queuePosition = (frame: LiveFrame) => {
+    const wait = lastPositionAt + POSITION_MIN_GAP_MS - Date.now();
+    if (wait <= 0 && !positionTimer) return sendPosition(frame);
+    heldPosition = frame;
+    positionTimer ??= setTimeout(() => {
+      positionTimer = undefined;
+      if (heldPosition) sendPosition(heldPosition);
+      heldPosition = undefined;
+    }, Math.max(0, wait));
+    positionTimer.unref();
+  };
+
   for (const event of BUS_EVENTS) {
     bus.on(event, (payload) => {
       if (event === "position") {
         const frame = toLive(event, payload as BusEvents[typeof event]);
+        if (frame) queuePosition(frame);
+        return;
       }
       if (event === "frame") {
         // Broadcast per-receiver RSSI as listener frames so Devices can show live dBm
@@ -237,6 +269,7 @@ export async function startMonitor(cfg: Config) {
       new Promise<void>((resolve) => {
         const ig = (ctx as unknown as Record<string, unknown>)._ingest as { stop?(): void } | undefined;
         ig?.stop?.();
+        clearTimeout(positionTimer);
         for (const ws of live.clients) ws.terminate();
         for (const ws of listenerWss.clients) ws.terminate();
         live.close();

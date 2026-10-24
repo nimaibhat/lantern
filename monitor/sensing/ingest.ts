@@ -16,6 +16,7 @@ const ListenerMsgSchema = z.discriminatedUnion("type", [
 
 const STALE_MS = 5_000;
 const OFFLINE_MS = 15_000;
+const TAG_OFFLINE_MS = 60_000; // taken off, battery flat, or LanternTag left the foreground
 
 export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, receiverOrder: string[]) {
   const window = new RssiWindow(receiverOrder);
@@ -46,6 +47,10 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
         log("sensing", `listener ${id} offline`);
       }
     }
+    const tagOnline = store.tagLastSeen != null && now - store.tagLastSeen < TAG_OFFLINE_MS;
+    if (store.tagOnline && !tagOnline) log("sensing", "tag offline: no listener has heard it for 60 s");
+    else if (!store.tagOnline && tagOnline) log("sensing", "tag heard");
+    store.tagOnline = tagOnline;
     const f = window.frame(now, { ...store.listeners });
     bus.emit("frame", f);
   }, 1000);

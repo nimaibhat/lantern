@@ -9,6 +9,8 @@ let monitor: Awaited<ReturnType<typeof startMonitor>>;
 let base = "";
 
 before(async () => {
+  // Noon, so night rules never add risk frames and these tests pass at any hour.
+  process.env.DEMO_HOUR = "12";
   monitor = await startMonitor({ ...loadConfig({}), port: 0, debug: true });
   base = `http://localhost:${monitor.port}`;
 });
@@ -71,6 +73,19 @@ test("BLE location is dropped while the sim lock is on", async () => {
   });
   assert.equal((await res.json()).emitted, false);
   assert.equal(monitor.store.room, "bedroom");
+});
+
+test("/health reports the tag once a listener hears it", async () => {
+  const health = async () => (await (await fetch(`${base}/health`)).json()) as { tagOnline: boolean };
+  assert.equal((await health()).tagOnline, false);
+  const ws = new WebSocket(`ws://localhost:${monitor.port}/ws/listener?token=change-me`);
+  await new Promise((resolve) => ws.on("open", resolve));
+  ws.send(JSON.stringify({ type: "hello", receiverId: "bedroom", kind: "mac-bleak" }));
+  ws.send(JSON.stringify({ type: "rssi", receiverId: "bedroom", tagId: "tag-1", rssi: -55, ts: Date.now() }));
+  // tagOnline is refreshed on the 1 s frame tick
+  for (let i = 0; i < 30 && !(await health()).tagOnline; i++) await new Promise((r) => setTimeout(r, 100));
+  ws.close();
+  assert.equal((await health()).tagOnline, true);
 });
 
 test("bad sim input is a 400, not a crash", async () => {
