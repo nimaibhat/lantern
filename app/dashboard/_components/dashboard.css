@@ -156,6 +156,10 @@ body:has(.dash.night) {
   padding: 28px 32px 64px;
 }
 
+/* globals.css gives the landing page's .content pointer-events: none (clicks fall through to the hero).
+   The dashboard reuses the class name, so turn clicks back on here or nothing in a page can be pressed. */
+.dash .content { pointer-events: auto; }
+
 .audit,
 .rooms,
 .room,
@@ -247,6 +251,17 @@ body:has(.dash.night) {
 .badge.redirecting,
 .badge.detected { color: var(--d-accent); border-color: var(--d-accent); }
 .badge.resolved { color: var(--d-ok); border-color: var(--d-ok); }
+.badge.sim { color: var(--d-accent); border-color: var(--d-accent); background: var(--d-accent-soft); }
+
+.card-chips { display: inline-flex; align-items: baseline; gap: 10px; }
+
+.tag-warn {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--d-accent-soft);
+  font-size: 0.85rem;
+}
 
 .dash input,
 .dash select {
@@ -600,6 +615,9 @@ body:has(.dash.night) {
   gap: 10px;
 }
 
+/* Inputs have an intrinsic width of about 20 characters; without this they push the grid past a phone screen. */
+.add-step > * { min-width: 0; }
+
 .steps {
   display: flex;
   flex-direction: column;
@@ -811,6 +829,7 @@ body:has(.dash.night) {
   .form-grid { grid-template-columns: 1fr; }
   .summary { gap: 10px; }
   .plan-card { grid-row: auto; }
+  .add-step { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .audit-item { flex-direction: column; gap: 10px; }
   .page-head { flex-direction: column; align-items: flex-start; }
   .player-controls { flex-wrap: wrap; justify-content: center; }

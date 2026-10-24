@@ -24,14 +24,20 @@ type Props = {
 };
 
 export function Overview({ household, rooms, receivers, auditItems, scan, ...initial }: Props) {
+  const { roomId, since, entries, risks, connected, listenersOnline, source, tag } = useMonitorLive({ rooms, receivers, ...initial });
   const openAudit = auditItems.filter((a) => a.status === "open");
   const high = openAudit.filter((a) => a.severity === "high").length;
+  // Only meaningful while listeners are up; with none online the receiver count already says what is wrong.
+  const tagLost = connected && listenersOnline > 0 && tag && !tag.online;
 
   return (
     <div className="overview">
       <section className="card plan-card">
         <div className="card-head">
           <h2>Home</h2>
+          <span className="card-chips">
+            {source === "sim" && <span className="badge sim">Simulated</span>}
+          </span>
         </div>
         <FloorPlan rooms={rooms} currentRoomId={roomId} />
       </section>
@@ -40,6 +46,12 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
         <p className="eyebrow">{household.patientName} is in the</p>
         <p className="now-room">{roomName(rooms, roomId)}</p>
         <p className="muted">since {since}</p>
+        {tagLost && (
+          <p className="tag-warn" role="status">
+            {household.patientName}&apos;s tag has not been heard {tag.lastSeen ? `for ${Math.max(1, Math.round((Date.now() - tag.lastSeen) / 60_000))} min` : "yet"}.
+            Check that it is worn and switched on.
+          </p>
+        )}
         <div className="stats">
           <div>
             <span className="stat">{online}/{receivers.length}</span>
@@ -63,6 +75,8 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
               <div>
                 <strong>{RISK_LABEL[r.kind]}</strong>
                 <span className="muted">
+                  {r.startedAt} · {roomName(rooms, r.roomId)} · {r.trigger === "predicted" ? "predicted" : "detected"}
+                  {r.source === "sim" && " · simulated"}
                 </span>
               </div>
               <span className={`badge ${r.state}`}>{r.state}</span>
