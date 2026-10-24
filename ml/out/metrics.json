@@ -1,0 +1,158 @@
+{
+  "accuracy": 0.9096655254148012,
+  "baselineAccuracy": 0.7584935475375296,
+  "perRoom": {
+    "bathroom": 0.7365010799136069,
+    "bedroom": 0.9758364312267658,
+    "front-door": 0.7361111111111112,
+    "hallway": 0.8954248366013072,
+    "kitchen": 0.9778699861687413,
+    "tv-room": 0.9902439024390244
+  },
+  "baselinePerRoom": {
+    "bathroom": 0.0,
+    "bedroom": 0.9879182156133829,
+    "front-door": 0.0,
+    "hallway": 0.9150326797385621,
+    "kitchen": 0.9806362378976486,
+    "tv-room": 0.9951219512195122
+  },
+  "confusion": [
+    [
+      341,
+      0,
+      96,
+      26,
+      0,
+      0
+    ],
+    [
+      2,
+      1050,
+      0,
+      22,
+      2,
+      0
+    ],
+    [
+      86,
+      0,
+      265,
+      9,
+      0,
+      0
+    ],
+    [
+      29,
+      21,
+      15,
+      685,
+      15,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      16,
+      707,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      4,
+      0,
+      406
+    ]
+  ],
+  "labels": [
+    "bathroom",
+    "bedroom",
+    "front-door",
+    "hallway",
+    "kitchen",
+    "tv-room"
+  ],
+  "leadTimesS": [
+    18,
+    18,
+    7,
+    9,
+    18,
+    -4,
+    24,
+    19,
+    28,
+    10,
+    17,
+    24,
+    18,
+    23,
+    12,
+    11,
+    1
+  ],
+  "falseRedirectsPerNight": 0.3333333333333333,
+  "latencyMs": 2000,
+  "dataset": "synthetic",
+  "shipped": "knn7",
+  "models": {
+    "baseline": 0.7584935475375296,
+    "knn3": 0.9022912825915196,
+    "knn5": 0.9049249407426916,
+    "knn7": 0.9096655254148012,
+    "rf": 0.9030813800368712
+  },
+  "windowsPerRoom": {
+    "bathroom": 463,
+    "bedroom": 1076,
+    "front-door": 360,
+    "hallway": 765,
+    "kitchen": 723,
+    "tv-room": 410
+  },
+  "generatedAt": "2026-10-23T21:37:50+00:00",
+  "pipeline": {
+    "sessions": 11,
+    "nights": 9,
+    "roomAccuracy": 0.9145141451414515,
+    "roomAccuracyNoHmm": 0.9297495418448382,
+    "impossibleJumps": 0,
+    "impossibleJumpsNoHmm": 7,
+    "roomChanges": 71,
+    "roomChangesNoHmm": 72,
+    "trueRoomChanges": 42,
+    "predictions": 26,
+    "predictionsCorrect": 17,
+    "positionErrorIn": 44,
+    "positionErrorRoomCenterIn": 46
+  },
+  "unplugged": {
+    "bedroom": {
+      "accuracy": 0.8787692307692307,
+      "accuracyUnmasked": 0.3883076923076923,
+      "falseRedirects": 7,
+      "falseRedirectsUnmasked": 48
+    },
+    "hallway": {
+      "accuracy": 0.9052890528905289,
+      "accuracyUnmasked": 0.7380073800738007,
+      "falseRedirects": 3,
+      "falseRedirectsUnmasked": 8
+    },
+    "kitchen": {
+      "accuracy": 0.7367773677736777,
+      "accuracyUnmasked": 0.5325953259532595,
+      "falseRedirects": 5,
+      "falseRedirectsUnmasked": 12
+    },
+    "tv-room": {
+      "accuracy": 0.9182041820418204,
+      "accuracyUnmasked": 0.8474784747847478,
+      "falseRedirects": 1,
+      "falseRedirectsUnmasked": 8
+    }
+  }
+}

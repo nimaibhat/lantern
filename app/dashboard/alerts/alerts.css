@@ -1,0 +1,19 @@
+.alerts { display: flex; flex-direction: column; gap: 20px; }
+.alerts-chips { display: flex; gap: 8px; }
+
+.alerts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.alerts-table th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--d-muted);
+  padding-bottom: 8px;
+}
+
+.alerts-table td { padding: 10px 12px 10px 0; border-top: 1px solid var(--d-border); }
+.alerts-table .mono { font-variant-numeric: tabular-nums; }

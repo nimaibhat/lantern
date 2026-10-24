@@ -78,6 +78,26 @@ test("mobility: a wheelchair cannot use a 30 in door, a walker can", () => {
   assert.equal(planMobility(twoRooms(36), "wheelchair")[0].ok, true);
 });
 
+test("mobility: a door exactly as wide as the device passes wherever it falls on the grid", () => {
+  for (let y = 66; y <= 78; y += 0.25) {
+    const at = (w: number) => home(twoRooms(w).rooms, [door("bedroom", "hallway", 144, y, w)]);
+    assert.equal(planMobility(at(32), "wheelchair")[0].ok, true, `32 in door at y=${y}`);
+    assert.equal(planMobility(at(31), "wheelchair")[0].ok, false, `31 in door at y=${y}`);
+    assert.equal(planMobility(at(24), "walker")[0].ok, true, `24 in door at y=${y}`);
+    assert.equal(planMobility(at(23), "walker")[0].ok, false, `23 in door at y=${y}`);
+  }
+});
+
+test("a narrow doorless opening is flagged at its full measured width", () => {
+  const h = twoRooms(30);
+  h.doors[0].kind = "opening";
+  const [item] = doorWidths(h.rooms[0], h);
+  assert.equal(item.measuredIn, 30); // no door leaf to subtract
+  assert.match(item.title, /^Opening between/);
+  h.doors[0].widthIn = 40;
+  assert.equal(doorWidths(h.rooms[0], h).length, 0);
+});
+
 test("mobility: furniture across the hallway blocks a walker", () => {
   const blocked = twoRooms(36, [obj("storage", 168, 72, 48, 40)]);
   const h = home([...blocked.rooms, room("kitchen", "kitchen", rect(192, 0, 100, 144))], [...blocked.doors, door("hallway", "kitchen", 192, 72, 36)]);

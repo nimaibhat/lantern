@@ -108,11 +108,18 @@
 .w3 .w3-btn.on { background: #f5a54a; border-color: #f5a54a; color: #1a1714; }
 .w3-btn:disabled { opacity: 0.4; cursor: default; }
 .w3-spacer { flex: 1; }
+
+/* 3D / 2D switch and the lazy 3D loader */
+.w3-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); }
+.w3-loading {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
+  color: #b5ab9f;
   font-family: var(--font-mono), monospace;
+  font-size: 0.8rem;
+}
 .w3-note { color: #e0664d; font-size: 0.8rem; pointer-events: auto; }
 
 .w3-label {

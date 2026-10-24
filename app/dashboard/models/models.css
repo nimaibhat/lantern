@@ -1,0 +1,218 @@
+/* Model metrics page. Mark colors were checked with the dataviz palette validator against both surfaces:
+   the accent is the shipped model, the warm gray is context (baseline). */
+
+.models {
+  --m-accent: #c9772a;
+  --m-context: #cfc6bb;
+  --m-on-accent: #fff;
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dash.night .models {
+  --m-accent: #cc7c30;
+  --m-context: #6b625a;
+  --m-on-accent: #1a1714;
+}
+
+.m-sim { color: var(--d-accent); border-color: var(--d-accent); }
+
+.m-note {
+  padding: 12px 16px;
+  border-radius: var(--d-radius);
+  background: var(--d-accent-soft);
+  max-width: 80ch;
+  font-size: 0.9rem;
+}
+
+.m-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.m-kpis .card { display: flex; flex-direction: column; gap: 6px; }
+.m-kpis .muted { font-size: 0.85rem; }
+
+.m-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.m-wide { grid-column: 1 / -1; }
+
+.m-foot { margin-top: 14px; color: var(--d-muted); font-size: 0.85rem; max-width: 70ch; }
+
+/* Bars: thin, rounded at the data end, square at the baseline */
+
+.m-bars,
+.m-rooms {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.m-bars li,
+.m-rooms li {
+  display: grid;
+  grid-template-columns: 9rem 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.m-track,
+.m-pair { display: flex; flex-direction: column; gap: 2px; }
+
+.m-bar {
+  display: block;
+  height: 12px;
+  border-radius: 0 4px 4px 0;
+}
+
+.m-pair .m-bar { height: 8px; }
+.m-accent { background: var(--m-accent); }
+.m-context { background: var(--m-context); }
+
+.m-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--d-muted);
+}
+
+.m-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.m-swatch { display: inline-block; width: 12px; height: 8px; border-radius: 0 3px 3px 0; }
+
+/* Confusion heat map: one hue, more share is darker */
+
+/* contain: inline-size keeps wide content from widening the page; it scrolls inside instead */
+.m-heat-wrap { overflow-x: auto; contain: inline-size; }
+
+.m-heat {
+  display: grid;
+  gap: 2px;
+  font-size: 0.75rem;
+  min-width: 420px;
+}
+
+.m-heat-col { padding: 0 2px 6px; color: var(--d-muted); text-align: center; line-height: 1.2; }
+.m-heat-row { padding-right: 10px; color: var(--d-muted); align-self: center; white-space: nowrap; }
+
+.m-cell {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border-radius: 4px;
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--d-text);
+}
+
+.m-cell.strong { color: var(--m-on-accent); }
+
+.m-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-table th { text-align: left; font-weight: 400; color: var(--d-muted); font-size: 0.8rem; padding-bottom: 8px; }
+.m-table td { padding: 8px 0; border-top: 1px solid var(--d-border); }
+.m-table td + td,
+.m-table th + th { padding-left: 16px; }
+
+/* Lead-time dot strip (HTML, so labels keep their size on a phone) */
+
+.m-strip {
+  position: relative;
+  height: 112px;
+  margin: 0 12px;
+  border-bottom: 1px solid var(--d-border);
+  margin-bottom: 32px;
+}
+
+.m-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--m-accent);
+  box-shadow: 0 0 0 2px var(--d-surface);
+}
+
+.m-dot::after { content: ""; position: absolute; inset: -7px; } /* bigger hover target than the dot */
+
+.m-median {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--d-border);
+}
+
+.m-median span { position: absolute; top: 0; right: 6px; white-space: nowrap; }
+
+.m-tick {
+  position: absolute;
+  bottom: -22px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* Live panel */
+
+.m-live-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 28px;
+}
+
+.m-live-grid > div { display: flex; flex-direction: column; gap: 8px; }
+.m-live-grid .stat { font-size: 1.8rem; }
+.m-live-grid .muted,
+.m-live-grid .error { font-size: 0.85rem; }
+
+.m-live h2 { display: flex; align-items: center; gap: 8px; }
+
+.m-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--d-ok);
+}
+
+.m-live-dot.off { background: var(--d-muted); }
+
+.m-live-off {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
+.m-code {
+  overflow-x: auto;
+  contain: inline-size;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--d-bg);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .m-grid { grid-template-columns: minmax(0, 1fr); }
+  .m-live-grid { grid-template-columns: minmax(0, 1fr); }
+  .m-bars li,
+  .m-rooms li { grid-template-columns: 6.5rem 1fr auto; }
+}

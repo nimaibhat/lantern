@@ -5,6 +5,7 @@
 
 import type { HomeModel, Vec2 } from "@/lib/types";
 import { bounds, distance, distanceToSegment, doorBetween, pointInPolygon } from "@/lib/world/geometry";
+import { blocksFloor, distanceToBox, doorAxis, objectBox, wallPieces } from "@/lib/world/walls";
 import type { AuditDraft } from "./ada";
 
 export const CELL_IN = 2;
@@ -38,6 +39,21 @@ export function rasterize(home: HomeModel, radiusIn: number): Grid {
       if (!home.rooms.some((r) => pointInPolygon(p, r.polygon))) continue;
       if (walls.some(([a, c]) => distanceToSegment(p, a, c) < radiusIn)) continue;
       if (boxes.some((bx) => distanceToBox(p, bx) < radiusIn)) continue;
+      free[row * cols + col] = 1;
+    }
+  }
+
+  // Cell centers rarely sit on a door's center line, so a door exactly as wide as the device would pass or
+  // fail depending on where it falls on the grid. Test the true center line through each door instead and open
+  // the cells it crosses wherever that line itself is clear.
+  const clear = (p: Vec2) => walls.every(([a, c]) => distanceToSegment(p, a, c) >= radiusIn) && boxes.every((bx) => distanceToBox(p, bx) >= radiusIn);
+  for (const d of home.doors) {
+    if (d.widthIn < radiusIn * 2) continue;
+    const ax = doorAxis(home, d);
+    for (let t = -(radiusIn + 2 * CELL_IN); t <= radiusIn + 2 * CELL_IN; t += CELL_IN / 4) {
+      const p = { x: d.center.x - ax.y * t, y: d.center.y + ax.x * t }; // along the door's normal
+      const col = Math.floor((p.x - x0) / CELL_IN), row = Math.floor((p.y - y0) / CELL_IN);
+      if (col < 0 || row < 0 || col >= cols || row >= rows || !clear(p)) continue;
       free[row * cols + col] = 1;
     }
   }

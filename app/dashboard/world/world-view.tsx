@@ -1,13 +1,58 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import "@/components/world/world.css";
+import type { CameraPreset, WallMode } from "@/components/world/home-scene";
+import { Plan2D } from "@/components/world/plan-2d";
 import { planMobility, type Profile } from "@/lib/audit/mobility";
 import type { HomeModel, Vec2 } from "@/lib/types";
 import { PATIENT_LABEL } from "@/lib/world/live-state";
 import { simulatePosition, useLive } from "@/lib/world/useLive";
 
+// three.js is only downloaded when someone picks 3D, so the 2D plan opens at once.
+const HomeScene = dynamic(() => import("@/components/world/home-scene").then((m) => m.HomeScene), {
+  ssr: false,
+  loading: () => <div className="w3-loading">Loading 3D view</div>,
+});
+
+type ViewKind = "3d" | "2d";
+const VIEW_KEY = "lantern-world-view";
+
+function hasWebGL() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl2") || c.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+// The signature view: the person moving through their own home, live, in 3D or as a to-scale 2D plan.
+export function WorldView({ home, mock, initialView }: { home: HomeModel; mock: boolean; initialView?: ViewKind }) {
   const live = useLive(home, { mock });
+  const [view, setView] = useState<ViewKind>("3d");
+  const [webgl, setWebgl] = useState(true);
+  const [measure, setMeasure] = useState(false);
+  const [fitSignal, setFitSignal] = useState(0);
+
+  // The choice is remembered per browser; without WebGL the plan is the only option.
+  useEffect(() => {
+    const ok = hasWebGL();
+    setWebgl(ok);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(VIEW_KEY);
+    } catch {}
+    setView(!ok || (initialView ?? saved) === "2d" ? "2d" : "3d");
+  }, [initialView]);
+  function pick(v: ViewKind) {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {}
+  }
   const [camera, setCamera] = useState<CameraPreset>("iso");
   const [walls, setWalls] = useState<WallMode>("low");
   const [dragMode, setDragMode] = useState(false);
@@ -32,6 +77,7 @@ import { simulatePosition, useLive } from "@/lib/world/useLive";
 
   return (
     <div className="w3">
+      {view === "3d" ? (
         <HomeScene
           state={live}
           camera={camera}
@@ -42,11 +88,18 @@ import { simulatePosition, useLive } from "@/lib/world/useLive";
           onDrop={drop}
           mobility={mobility}
         />
+      ) : (
+        <Plan2D
+          state={live}
           dragMode={dragMode}
           ghost={ghost}
           onDrag={setGhost}
           onDrop={drop}
           mobility={mobility}
+          measure={measure}
+          fitSignal={fitSignal}
+        />
+      )}
 
       <div className="w3-hud">
         <div className="w3-card">
@@ -81,13 +134,35 @@ import { simulatePosition, useLive } from "@/lib/world/useLive";
       {simulated && <div className="w3-sim-badge">SIMULATED</div>}
 
       <div className="w3-tools">
+        <span className="w3-seg" role="group" aria-label="View">
+          <button className={`w3-btn ${view === "3d" ? "on" : ""}`} onClick={() => pick("3d")} disabled={!webgl} title={webgl ? "3D model of the home" : "This browser cannot show 3D"}>
+            3D
+          </button>
+          <button className={`w3-btn ${view === "2d" ? "on" : ""}`} onClick={() => pick("2d")} title="To-scale floor plan">
+            2D
+          </button>
+        </span>
+        {view === "3d" ? (
+          <>
             {(["iso", "top", "follow"] as CameraPreset[]).map((c) => (
               <button key={c} className={`w3-btn ${camera === c ? "on" : ""}`} onClick={() => setCamera(c)}>
+                {c === "iso" ? "Angled" : c === "top" ? "Top down" : "Follow"}
               </button>
             ))}
             <button className="w3-btn" onClick={() => setWalls(walls === "low" ? "full" : walls === "full" ? "off" : "low")}>
               Walls: {walls}
             </button>
+          </>
+        ) : (
+          <>
+            <button className={`w3-btn ${measure ? "on" : ""}`} onClick={() => setMeasure(!measure)} title="Room sizes, door widths and a tape measure (drag on the plan)">
+              {measure ? "Measuring" : "Measure"}
+            </button>
+            <button className="w3-btn" onClick={() => setFitSignal((n) => n + 1)} title="Zoom out to the whole home (or double-click the plan)">
+              Fit
+            </button>
+          </>
+        )}
         <button className={`w3-btn ${dragMode ? "on" : ""}`} onClick={() => setDragMode(!dragMode)} title="Drag on the floor to move the person (uses the simulator)">
           {dragMode ? "Dragging: on" : "Drag to simulate"}
         </button>

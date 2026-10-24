@@ -3,16 +3,19 @@
 // The home in 3D, built procedurally from the HomeModel so the geometry matches the coordinates the
 // avatar uses. Plan (x, y) inches map to scene (x * 0.0254, 0, y * 0.0254) meters, up is +Y.
 
+import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import type { HomeModel, HomeRoom, RiskState, Vec2 } from "@/lib/types";
 import type { MobilityLeg } from "@/lib/audit/mobility";
 import { bounds, IN_TO_M, roomAt, routeBetween } from "@/lib/world/geometry";
 import type { LiveState } from "@/lib/world/live-state";
 import { riskByRoom } from "@/lib/world/live-state";
 import { doorAxis, wallPieces } from "@/lib/world/walls";
 import { Avatar } from "./avatar";
+import { FLOOR, HERE, RISK_FLOOR } from "./palette";
 
 export type CameraPreset = "top" | "iso" | "follow";
 export interface HeatCell { x: number; y: number; weight: number } // plan inches, weight 0..1
@@ -21,6 +24,36 @@ const M = (p: Vec2, h = 0): [number, number, number] => [p.x * IN_TO_M, h, p.y *
 const WALL_IN = 96;
 const LINTEL_IN = 80;
 const WALL_THICK_M = 0.08;
+
+// Text pinned to a point in the scene. drei's <Html> mounts a React root per label, and StrictMode's dev double
+// mount unmounts those roots mid-render: a console error per label and the dev overlay's issue badge on the demo
+// screen. These labels are plain text, so a bare DOM node moved every frame does the same job. No z-index, so the
+// HUD drawn after the canvas stays on top.
+function Label({ position, text, className, visible = true }: { position: [number, number, number]; text: string; className: string; visible?: boolean }) {
+  const gl = useThree((s) => s.gl);
+  const el = useRef<HTMLDivElement | null>(null);
+  const v = useMemo(() => new THREE.Vector3(), []);
+  useEffect(() => {
+    const div = document.createElement("div");
+    div.style.cssText = "position:absolute;top:0;left:0;pointer-events:none;";
+    gl.domElement.parentNode?.appendChild(div);
+    el.current = div;
+    return () => {
+      div.remove();
+      el.current = null;
+    };
+  }, [gl]);
+  useFrame(({ camera, size }) => {
+    const div = el.current;
+    if (!div) return;
+    if (div.className !== className) div.className = className;
+    if (div.textContent !== text) div.textContent = text;
+    v.set(...position).project(camera);
+    div.style.visibility = visible && v.z < 1 ? "visible" : "hidden"; // z >= 1: behind the camera
+    div.style.transform = `translate3d(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px, 0) translate(-50%, -50%)`;
+  });
+  return null;
+}
 
 
 function Floor({ room, here, risk, outlined }: { room: HomeRoom; here: boolean; risk?: RiskState; outlined?: boolean }) {
@@ -123,6 +156,7 @@ function HazardPin({ position, title, severity }: { position: Vec2; title: strin
         <sphereGeometry args={[0.09, 16, 16]} />
         <meshStandardMaterial color={severity === "high" ? "#b5452f" : "#e09a3c"} emissive={severity === "high" ? "#b5452f" : "#e09a3c"} emissiveIntensity={0.5} />
       </mesh>
+      <Label position={M(position, 0.45)} text={title} className="w3-tip" visible={hover} />
     </group>
   );
 }
@@ -245,6 +279,7 @@ export function HomeScene({ state, camera, walls = "low", dragMode, onDrag, onDr
       {heat && <Heat cells={heat.cells} cellIn={heat.cellIn} />}
 
       {home.rooms.map((r) => (
+        <Label key={r.id} position={M(r.centroid, 0.05)} text={`${r.name}${r.virtual ? " (zone)" : ""}`} className="w3-label" />
       ))}
       {home.anchors.map((a) => (
         <Listener key={a.receiverId} position={a.position} online={state.listeners[a.receiverId]} rssi={state.rssi[a.receiverId]} />
@@ -269,6 +304,12 @@ export function HomeScene({ state, camera, walls = "low", dragMode, onDrag, onDr
 
       {predicted.length > 1 && <Line points={predicted.map((p) => M(p, 0.04))} color="#f5a54a" lineWidth={2} dashed dashSize={0.25} gapSize={0.15} />}
       {/* Always mounted; hidden when there is no prediction (see the hazard tooltip note). */}
+      <Label
+        position={next ? M(next.centroid, 1.2) : [0, -10, 0]}
+        text={next && prediction ? `Predicted: ${roomName(next.id)} ${Math.round(prediction.probability * 100)}%` : ""}
+        className="w3-predict"
+        visible={!!(next && prediction)}
+      />
 
       {trail.length > 1 && (
         <Line

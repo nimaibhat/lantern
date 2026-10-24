@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuditItems, getRooms } from "@/lib/dashboard/data";
+import { ftIn as feet } from "@/lib/world/units";
 import { worldLabsConfigured } from "@/lib/scan/worldlabs";
 import { FloorPlan } from "@/app/dashboard/_components/floor-plan";
 import { RoomPreview } from "../room-preview";

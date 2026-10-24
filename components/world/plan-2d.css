@@ -1,0 +1,81 @@
+/* 2D floor plan (components/world/plan-2d.tsx). Sizes are plan inches, so text and lines scale with the plan. */
+
+.p2 {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.p2:active { cursor: grabbing; }
+.p2.sim,
+.p2.measuring { cursor: crosshair; }
+
+.p2-wall { stroke: #efe9df; stroke-linecap: square; }
+.p2-object { fill: #a89a88; fill-opacity: 0.55; stroke: #8c7e6d; stroke-width: 1; }
+.p2-door line,
+.p2-door path { fill: none; stroke: #b5ab9f; stroke-width: 1.2; }
+
+.p2-label text {
+  fill: #3b342d;
+  font-family: var(--font-heading), sans-serif;
+  font-size: 9px;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+
+.p2 .p2-dim {
+  fill: #6b6158;
+  font-family: var(--font-mono), monospace;
+  font-size: 6px;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.p2 .p2-dim-door { fill: #ebe6de; }
+
+.p2-leg polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.p2-predict { fill: none; stroke-width: 3; stroke-dasharray: 10 7; stroke-linecap: round; }
+.p2-predict-label {
+  fill: #1a1714;
+  font-family: var(--font-mono), monospace;
+  font-size: 7px;
+  paint-order: stroke;
+  stroke: #f5a54a;
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.p2-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: p2-pulse 1.6s ease-out infinite;
+}
+
+@keyframes p2-pulse {
+  from { transform: scale(0.35); opacity: 0.7; }
+  to { transform: scale(1); opacity: 0; }
+}
+
+.p2-scale line { stroke: #ebe6de; stroke-width: 1.5; }
+.p2-scale text { fill: #ebe6de; font-family: var(--font-mono), monospace; font-size: 7px; }
+
+.p2-tape line { stroke: #f5a54a; stroke-width: 1.5; stroke-dasharray: 4 2; }
+.p2-tape circle { fill: #f5a54a; }
+.p2-tape text {
+  fill: #1a1714;
+  font-family: var(--font-mono), monospace;
+  font-size: 7px;
+  paint-order: stroke;
+  stroke: #f5a54a;
+  stroke-width: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p2-pulse { animation: none; opacity: 0.35; }
+}

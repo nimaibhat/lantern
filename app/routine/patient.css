@@ -1,0 +1,116 @@
+/* Patient TV screen (app/routine/patient-screen.tsx): huge text, warm, slow fades, nothing that blinks. */
+
+.pt-idle { transition: filter 2s ease; }
+.pt-idle.night { filter: brightness(0.55); }
+
+.pt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vh;
+  padding: 6vw;
+  text-align: center;
+  animation: pt-in 1.2s ease-out both;
+}
+
+/* Low, warm light that fills the room: the first, gentlest response */
+.pt-glow {
+  background: radial-gradient(circle at 50% 55%, rgba(245, 165, 74, 0.6), rgba(26, 23, 20, 0.97) 72%);
+  animation-duration: 4s;
+}
+
+.pt-voice {
+  background: #1a1714;
+  color: #ebe6de;
+  box-shadow: inset 0 0 0 1.4vw #f5a54a;
+}
+
+.pt-photo {
+  max-width: 70vw;
+  max-height: 48vh;
+  border-radius: 2vw;
+  object-fit: cover;
+}
+
+.pt-message {
+  max-width: 22ch;
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(2rem, 6.5vw, 7rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.pt-greeting {
+  background: linear-gradient(180deg, #f5f2ed, #ebe6de);
+  color: #3b342d;
+}
+
+.pt-next {
+  font-size: clamp(1.2rem, 3vw, 3rem);
+  color: #7a7067;
+}
+
+.pt-calm {
+  background: #1a1714;
+  animation: pt-out 3s ease-in forwards;
+}
+
+.pt-tap {
+  border: 0;
+  background: #1a1714;
+  color: #ebe6de;
+  font: inherit;
+  font-family: var(--font-heading), sans-serif;
+  font-size: clamp(2rem, 5vw, 5rem);
+  cursor: pointer;
+  animation: none;
+}
+
+.pt-tap-again {
+  position: fixed;
+  left: 50%;
+  bottom: 4vh;
+  z-index: 55;
+  transform: translateX(-50%);
+  padding: 1.2vh 3vw;
+  border: 0;
+  border-radius: 999px;
+  background: #f5a54a;
+  color: #1a1714;
+  font: inherit;
+  font-size: clamp(1rem, 2.4vw, 2rem);
+  cursor: pointer;
+}
+
+.pt-preview {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(26, 23, 20, 0.85);
+  color: #ebe6de;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pt-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0664d; }
+.pt-dot.on { background: #7fb083; }
+
+@keyframes pt-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pt-out { from { opacity: 1; } to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-overlay, .pt-calm { animation: none; }
+  .pt-calm { opacity: 0; }
+}
