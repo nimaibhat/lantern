@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+const MONITOR_URL = process.env.NEXT_PUBLIC_MONITOR_URL || "http://localhost:8787";
 const POLL_MS = 1000;
 
 type Status = { active: { session: string; roomId: string; file: string } | null; windowsPerRoom: Record<string, number>; target: number };
@@ -17,6 +19,8 @@ export function Calibration({ rooms }: { rooms: { id: string; name: string }[] }
     const poll = async () => {
       try {
         const r = await fetch(`${MONITOR_URL}/calibrate/status`);
+        const data = await r.json();
+        if (!stop) setStatus(r.ok && data?.windowsPerRoom ? data : null);
       } catch {
         if (!stop) setStatus(null);
       }
@@ -65,6 +69,9 @@ export function Calibration({ rooms }: { rooms: { id: string; name: string }[] }
             )}
           </div>
           {active && <p className="mono">Recording {active.session} in {active.roomId} → {active.file}</p>}
+          {active && Object.values(status.windowsPerRoom).every((n) => !n) && (
+            <p className="muted">Recording, but no tag has been heard. The bars stay empty until a listener hears LanternTag. This laptop can listen or be the tag, not both.</p>
+          )}
           {error && <p className="error">{error}</p>}
           <ul style={{ listStyle: "none", display: "grid", gap: 6, marginTop: 10 }}>
             {rooms.map((r) => {

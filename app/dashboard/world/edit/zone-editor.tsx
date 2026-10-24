@@ -257,7 +257,9 @@ export function ZoneEditor({ initial, saved }: { initial: HomeModel; saved: bool
             ))}
           </div>
           {mode === "draw" && (
+            <div className="muted small">
               Click each corner. Click the first corner again or <button className="btn small" onClick={finishDraft} disabled={draft.length < 3}>Finish</button>
+            </div>
           )}
           <label style={{ marginTop: 10 }}>
             Snap

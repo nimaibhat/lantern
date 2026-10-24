@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
 // Familiar voice and photo for the TV redirect. A caregiver records each line in their own voice (or uploads a
 // clip) and picks the photo shown with it. Lines without a recording are read aloud by the TV instead.
 

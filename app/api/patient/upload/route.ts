@@ -7,6 +7,8 @@ import {
   VOICE_SLOTS,
   voicePath,
 } from "@/lib/dashboard/redirect-media";
+import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
+
 // The caregiver's familiar voice lines and the redirect photo for the TV screen.
 // GET                                   -> { patientName, slots: [{ slot, label, when, line, url }], photo: url | null }
 // POST  form: kind=voice, slot, file    -> stores the recording in that slot
