@@ -322,7 +322,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
     if (listen && local && data.listening === false) {
-      setNote("This laptop could not start listening. Turn Bluetooth on and press Pair again.");
+      setNote("The background listener could not start. Press Pair again — Chrome will scan directly.");
       return false;
     }
     return true;
@@ -419,7 +419,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
         return;
       }
-      // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
+      // Mac and Windows Chrome can both hear the phone via Web Bluetooth (watchAdvertisements).
       if (kind === "mac") {
         if (!window.isSecureContext) {
           setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
@@ -449,20 +449,36 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
         return;
       }
+      // All Windows devices (hub or not): try Web Bluetooth first — zero install
+      if (!window.isSecureContext) {
+        setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
+        return;
+      }
+      if (!bluetooth()) {
+        setNote("This browser does not support Bluetooth. Open this page in Google Chrome (not Edge or Firefox).");
+        return;
+      }
+      if (browserCanWatch()) {
+        const watched = await listenInPage();
+        if (watched === "cancelled") {
+          setNote("Pick LanternTag in the list. Make sure LightBlue is running on the phone with LanternTag advertising.");
+          return;
+        }
+        if (watched === "watching") {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (saved) setNote("LanternTag is selected. Leave this tab open so it keeps hearing the phone.");
+          return;
+        }
+      }
+      // Hub fallback: try the Python listener if Web Bluetooth didn't work
       if (here) {
         const saved = await saveLaptop(trimmed, true, true, true);
-        if (saved) setNote("This laptop is listening. Leave this page open.");
-        return;
+        if (saved) {
+          setNote("This laptop is listening. Leave this page open.");
+          return;
+        }
       }
-      const saved = await saveLaptop(trimmed, false, false);
-      const id = deviceIdRef.current;
-      if (!saved || !id) return;
-      if (await askAgent(id)) {
-        setNote("This laptop is listening. Leave this page open.");
-        return;
-      }
-      setLaunchId(id);
-      setNote("Open the Lantern file. Leave its window open until this laptop shows a dBm reading.");
+      setNote("Chrome could not scan for Bluetooth devices. Make sure Bluetooth is on in Windows Settings, and that you are using Google Chrome (not Edge). Then press Pair again.");
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {
