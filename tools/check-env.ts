@@ -54,7 +54,7 @@ async function main() {
     add("ok", "Monitor", `${monitor} answers`);
     add(online >= 3 ? "ok" : online > 0 ? "warn" : "missing", "Listeners", `${online} of ${listeners.length} online${online < 3 ? " (3 or more for reliable rooms)" : ""}`);
     const seen = h.tagLastSeen ? Math.round((Date.now() - h.tagLastSeen) / 1000) : undefined;
-    add(seen !== undefined && seen < 10 ? "ok" : "warn", "Tag", seen === undefined ? "never heard; open LanternTag and tap Start" : `last heard ${seen} s ago`);
+    add(seen !== undefined && seen < 10 ? "ok" : "warn", "Tag", seen === undefined ? "never heard; open the Lantern app, Tag tab, and tap Start" : `last heard ${seen} s ago`);
     const inf = await reachable(`${monitor}/debug/inference`);
     add(inf.ok ? "ok" : "warn", "Room classifier", inf.ok ? "loaded" : "no /debug/inference answer; check ml/out/knn.json");
   }

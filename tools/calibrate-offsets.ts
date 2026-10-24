@@ -62,7 +62,7 @@ async function main() {
     await rl.question(`\nHold the tag 1 m from the ${id} listener, then press Enter.`);
     const readings = await sample(id);
     if (readings.length < SECONDS / 3) {
-      console.log(`  Too few readings from ${id} (${readings.length}). Is LanternTag open and advertising? Skipped.`);
+      console.log(`  Too few readings from ${id} (${readings.length}). Is the Lantern app open on the Tag tab and advertising? Skipped.`);
       continue;
     }
     const m = median(readings);

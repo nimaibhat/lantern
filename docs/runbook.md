@@ -14,7 +14,7 @@
    ```
    Confirm all four show in `/health`.
 5. **Patient routine** fullscreen on the Mac beside the Roku: open `/routine?h=<id>`, tap once for audio.
-6. **Tag phone**: open LanternTag, tap Start, enable Guided Access (triple-click side button). Hold in the trained hand position.
+6. **Tag phone**: open the Lantern app, Tag tab, tap Start, enable Guided Access (triple-click side button). Hold in the trained hand position.
 
 ## Shutdown order
 
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8787/record/stop     # saved to fixtures/sessions/
 
 - [ ] Laptops charged, plugged in, lids open, sleep disabled
 - [ ] Hotspot on; every device on it; monitor IP on tape
-- [ ] Tag phone charged, screen on, Auto-Lock off, LanternTag foreground, Guided Access on
+- [ ] Tag phone charged, screen on, Auto-Lock off, Lantern app foreground on the Tag tab, Guided Access on
 - [ ] All listeners in `/health`; offsets applied
 - [ ] `/routine` fullscreen on the TV; audio tapped; volume set
 - [ ] Sim buttons open in a spare tab; a recorded run saved locally
