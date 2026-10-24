@@ -9,7 +9,14 @@ import type { Receiver } from "@/lib/types";
 const WS_URL = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const SERVICE = "4c414e54-4552-4e00-a000-000000000001";
 
-type AdEvent = Event & { rssi?: number; name?: string; uuids?: string[]; device?: { name?: string } };
+type AdEvent = Event & {
+  rssi?: number;
+  name?: string;
+  uuids?: string[];
+  device?: { name?: string };
+  manufacturerData?: { forEach: (fn: (value: DataView, key: number) => void) => void };
+  serviceData?: { forEach: (fn: (value: DataView, key: string) => void) => void };
+};
 type BleDevice = {
   name?: string;
   watchAdvertisements?: () => Promise<void>;
@@ -54,10 +61,19 @@ function browserCanWatch(): boolean {
   return typeof proto?.watchAdvertisements === "function";
 }
 
+function bytesToText(view: DataView): string {
+  let text = "";
+  for (let i = 0; i < view.byteLength; i++) text += String.fromCharCode(view.getUint8(i));
+  return text.toLowerCase();
+}
+
 function adMatches(event: AdEvent): boolean {
-  const name = `${event.name ?? ""} ${event.device?.name ?? ""}`.toLowerCase();
+  const chunks = [event.name ?? "", event.device?.name ?? ""];
+  event.manufacturerData?.forEach((value) => chunks.push(bytesToText(value)));
+  event.serviceData?.forEach((value, key) => chunks.push(key, bytesToText(value)));
+  const name = chunks.join(" ").toLowerCase();
   const uuids = (event.uuids ?? []).map((id) => id.toLowerCase());
-  return name.includes("lantern") || uuids.includes(SERVICE);
+  return name.includes("lantern") || uuids.includes(SERVICE) || name.includes(SERVICE);
 }
 
 async function onHub(): Promise<boolean> {
@@ -332,30 +348,25 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     return true;
   }
 
-  // Each laptop scans with its own radio. The reading is posted to the hub, which stores it for every screen.
+  // Pick LanternTag itself. A broad scan marks the page as listening and then drops the phone.
   async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
     const bt = bluetooth();
     if (!browserCanWatch() || !bt) return "unavailable";
     try {
-      if (typeof bt.requestLEScan === "function" && bt.addEventListener) {
-        try {
-          await bt.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
-        } catch (scanErr) {
-          const scanName = scanErr instanceof DOMException ? scanErr.name : "";
-          if (scanName === "NotFoundError" || scanName === "AbortError") return "cancelled";
-          await bt.requestLEScan({
-            filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
-            keepRepeatedDevices: true,
-          });
-        }
+      const device = await bt.requestDevice({
+        filters: [{ namePrefix: "Lantern" }, { namePrefix: "lantern" }, { services: [SERVICE] }],
+      });
+      bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
+      const watching = await watchDevice(device);
+      if (!watching && typeof bt.requestLEScan === "function" && bt.addEventListener) {
+        await bt.requestLEScan({
+          filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
+          keepRepeatedDevices: true,
+        });
         bt.addEventListener("advertisementreceived", (event) => onAd(event, true));
         return "watching";
       }
-      const device = await bt.requestDevice({
-        filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
-      });
-      bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
-      return (await watchDevice(device)) ? "watching" : "unavailable";
+      return watching ? "watching" : "unavailable";
     } catch (err) {
       const picked = err instanceof DOMException ? err.name : "";
       // #region agent log
@@ -408,7 +419,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       }
       if (watched === "watching") {
         const saved = await saveLaptop(trimmed, false, false);
-        if (saved) setNote("Looking for the phone on this laptop. Leave this page open.");
+        if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
         return;
       }
       if (kind === "mac") {

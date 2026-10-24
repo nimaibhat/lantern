@@ -61,6 +61,9 @@ if (Test-Path $pidFile) {
   if ($old) { Stop-Process -Id $old -Force -ErrorAction SilentlyContinue }
 }
 Set-Content -Path $pidFile -Value $PID
+try {
+  Invoke-RestMethod -Uri $post -Method Post -Body ('{"action":"view","hub":false,"hostLocal":false,"pairShown":true,"error":"scanner-up ' + $deviceId + '","protocol":"https:"}') -ContentType "application/json" | Out-Null
+} catch {}
 try { $watcher.Start() } catch { Write-Output "Turn Bluetooth on for this computer."; exit 1 }
 Write-Output "Listening for LanternTag. Leave this window open."
 $lastPost = [int64]0
