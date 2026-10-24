@@ -36,7 +36,10 @@ A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, 
 app/                 Next.js routes (landing page at /, dashboard at /dashboard)
 app/api/             server routes (scan upload, world model, tracking, alerts)
 app/dashboard/       one folder per page; shared shell, nav, overview and styles in _components/
+app/routine/         the patient's TV: Now and Next, chime and calm voice, cues, Vapi companion
+app/signs/           printable door signs from the scanned rooms
 lib/types/           type contracts split by module (world, sensing, inference, actions, live, bus)
+lib/cues/            what Lantern says: cue wording, family texts, Vapi agents, routine prompts (docs/cues.md)
 lib/world/           home model: geometry, RoomPlan parser, builder, live state, useLive
 lib/audit/           accessibility rules, mobility planner, fixes, vision hazards
 lib/dashboard/       dashboard reads (data.ts), server actions, demo fallback data
@@ -52,9 +55,9 @@ monitor/             Node service: HTTP + WS server, module host
 monitor/world/       serves the newest home model, routes through doors
 monitor/sensing/     listener ingest, RssiWindow, SensorFrame, simulator
 monitor/inference/   room classifier, door-graph HMM, position, predictor
-monitor/actions/     risk engine, responder, Twilio, TV
+monitor/actions/     risk engine, responder (grace, repeating cues), Twilio, Vapi calls, time away, TV
 tools/               dev helpers (mock-rssi, replay, check-env, find-roku, calibrate-offsets)
-docs/                runbook, project status, spike notes
+docs/                runbook, project status, spike notes, cues (cues.md), Vapi setup (vapi.md)
 ml/                  RSSI training scripts and saved model
 fixtures/            sample RoomPlan JSON, RSSI CSV, photos, home model
 supabase/            migrations and seed

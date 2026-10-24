@@ -24,9 +24,14 @@ How Lantern talks to the person at home and to the family. Built on the risk eng
    - shown smaller and spoken after it: "You're in the kitchen. Your bed is back through the hallway."
    - a route strip under it: Kitchen > Hallway > Bedroom, built from the scan's door graph (`roomPath`).
 4. **Repeat.** Every `repeatEveryS`, up to `maxCues`, with the same words. If they move, the next cue starts from
-   the new room. From the second cue on, the family's recording plays when there is one.
-5. **Back in a safe room.** The cue stops and the screen says "Rosa, good night. Sleep well." then fades.
-6. **Still not back.** The family gets one calm text with what happened and what to do, then a call, then the backup.
+   the new room. From the second cue on, the family's recording plays when there is one, or, if it is switched on,
+   the Vapi companion takes over and talks with them (`docs/vapi.md`).
+5. **Back in a safe room.** The cue stops. In bed at night the screen says "Rosa, good night. Sleep well." then
+   fades; anywhere else safe (the TV room after leaving the kitchen) it says "Rosa, thank you."
+6. **Still not back.** The family gets one calm text with what happened and what to do, then a call (the Vapi agent
+   when set up, which can hear "yes, I'll go"), then the backup.
+
+Anyone can skip the waiting: the companion's help tool, or `POST /help` on the monitor, texts the family at once.
 
 | Profile | grace | first cue | repeat | cues | family texted (gentle kinds) | urgent kinds texted |
 |---|---|---|---|---|---|---|
@@ -47,10 +52,13 @@ Gentle kinds: `kitchen-night`, `night-wandering`, `no-movement`. Urgent kinds: `
 
 - The idle screen is a "Now and Next" guide from the routine: the current step big, with the room's photo, and the
   next step small. It follows the clock.
-- At a step's time the same chime plays and the step is spoken ("Rosa, it's time for breakfast. It's in the
-  kitchen."). It repeats every 5 minutes, at most 3 times, until the person reaches that room or someone taps Done.
-  No routine prompts during quiet hours.
-- `/signs` prints a photo label for each scanned room to tape on its door.
+- At a step's time the same chime plays and the step is spoken, name first ("Rosa, breakfast is in the kitchen.").
+  It repeats every 5 minutes, at most 3 times, until the person reaches that room or someone taps Done. A step more
+  than an hour old is never prompted, so nothing plays in the middle of the night. Times show as "3:00 PM".
+- **A message from the family.** The overview's "Say something on the TV" box shows what the caregiver types, big,
+  for one minute, after the chime, read aloud as "Rosa, ...". The monitor refuses while a reminder is playing, so
+  two voices never overlap. The text is never logged.
+- `/signs` prints a label for each scanned room, with its photo when there is one, to tape on its door.
 
 ## Time away
 
@@ -60,8 +68,9 @@ during quiet hours, and minutes per room today. The overview shows it live.
 ## The family
 
 - Texts say what happened, what Lantern already did, and one next step, in plain words. No pronouns for the person.
-- When a person who was texted goes back on their own, everyone texted gets "Update: Rosa is back in the bedroom.
-  No need to check."
+- When a person who was texted goes back to bed on their own, everyone texted gets "Update: Rosa is back in the
+  bedroom. No need to check." If they only left the risky room (the TV room at 3 AM), the update says so and that
+  Lantern is still watching, without "no need to check".
 - When someone taps the link, the other contact (if texted) hears that someone is on it.
 - The analytics page shows last night in one paragraph. With `MORNING_SUMMARY_SMS=1` the primary contact also gets
   it by text at the end of quiet hours. Off by default, and dry run like every other message.
@@ -73,10 +82,30 @@ All new fields are optional, so older screens and tests keep working.
 
 - `RiskEvent`: `upSince` (left bed), `graceUntil`, `cues` (reminders played so far).
 - `PatientState` and the `patient` live frame: `detail`, `route`, `cue`, `roomId`.
+- `PatientMode`: new `note` (a message the caregiver typed).
 - `risk` live frame: `graceUntil`, `cues`.
+
+New monitor endpoints: `GET /dwell`, `POST /help`, `POST /patient/say`. `GET /analytics/summary` gains `night` and
+`workedAfterCue`.
+
+## Code
+
+| Piece | Where |
+|---|---|
+| Wording (cues, closing, greeting, routine prompts, typed notes) | `lib/cues/script.ts` |
+| Family texts and call script | `lib/cues/family.ts` |
+| Vapi agent configs | `lib/cues/vapi.ts` |
+| Routine prompt timing, calm voice pick | `lib/cues/routine.ts`, `lib/cues/voice.ts` |
+| Grace, repeats, escalation, updates | `monitor/actions/responder.ts` |
+| Time away | `monitor/actions/dwell.ts` |
+| TV page: chime, voice, route strip, companion | `app/routine/` |
+| Message box, time today, grace and reminder status | `app/dashboard/_components/` |
+| Door signs | `app/signs/` |
 
 ## Not built yet
 
 - Smart bulbs as breadcrumb lights along the route (`KASA_BULB_IP`). The route is ready; the bulb protocol is not.
 - Staying quiet when a caregiver is home (their phone as a second tag).
 - Editing the timings from Settings (Settings does not save yet). Use the profile and `CUE_GRACE_MIN` for now.
+- The monitor's POST endpoints (`/patient/say`, `/help`, `/ack`) have no login, like the rest of the monitor: anyone
+  on the home network could use them. Fine for the demo; add a shared token before a real home.
