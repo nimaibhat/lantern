@@ -169,13 +169,18 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   }, []);
 
   useEffect(() => {
-    let ws: WebSocket;
+    let ws: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout>;
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      try {
+        ws = new WebSocket(WS_URL);
+      } catch {
+        // Mixed content (ws:// from https:// page) — fall back to HTTP polling only
+        return;
+      }
       ws.onopen = () => setConnected(true);
       ws.onclose = () => { retry = setTimeout(connect, 2000); };
-      ws.onerror = () => ws.close();
+      ws.onerror = () => ws?.close();
       ws.onmessage = (e) => {
         try {
           const frame = JSON.parse(e.data);

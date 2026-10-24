@@ -48,7 +48,11 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
     };
 
     function connect() {
-      ws = new WebSocket(WS_URL);
+      try {
+        ws = new WebSocket(WS_URL);
+      } catch {
+        return; // mixed content (ws:// from https://) — page uses HTTP polling instead
+      }
       ws.onopen = () => setConnected(true);
       ws.onclose = () => {
         setConnected(false);

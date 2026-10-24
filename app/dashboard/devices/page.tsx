@@ -78,7 +78,11 @@ export default function DevicesPage() {
     let retry: ReturnType<typeof setTimeout>;
 
     function connect() {
-      ws = new WebSocket(MONITOR_WS);
+      try {
+        ws = new WebSocket(MONITOR_WS);
+      } catch {
+        return; // mixed content (ws:// from https://) — page uses HTTP polling instead
+      }
       wsRef.current = ws;
       ws.onopen = () => setConnected(true);
       ws.onclose = () => { setConnected(false); retry = setTimeout(connect, 2000); };
