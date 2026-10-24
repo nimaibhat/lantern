@@ -1,0 +1,61 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# local https certificates
+certificates/
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files hold secrets; only the template is committed
+.env
+.env.local
+.env.*
+!.env.example
+
+# deployment
+.vercel/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# testing
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# misc
+*.pem
+
+# large source media at the repo root (the web copy lives in public/); anchored so app/api/patient/media is kept
+/media/
+
+# Headless browser profiles from local screenshot scripts
+*-profile/
+
+# Editor-local MCP config (each person connects their own)
+.cursor/
