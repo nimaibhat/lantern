@@ -12,13 +12,12 @@ import { bounds, closestOnSegment, distance, polygonArea, roomAt, routeBetween }
 import { riskByRoom, type LiveState } from "@/lib/world/live-state";
 import { ftIn } from "@/lib/world/units";
 import { doorAxis, wallPieces } from "@/lib/world/walls";
+import { LiveMarker } from "./live-marker";
 import { AMBER, FLOOR, HERE, LISTENER, LISTENER_OFF, RISK_FLOOR, ROUTE_BLOCKED, ROUTE_OK } from "./palette";
 import "./plan-2d.css";
 
 const PAD = 36; // inches of margin around the plan
 const WALL_IN = 5; // drawn wall thickness
-const GLIDE = 12; // per second: about 90 percent of the way to a 5 Hz position before the next one lands
-const JUMP_IN = 120; // farther than this (tag re-acquired after a silence) snaps rather than gliding through walls
 const SNAP_IN = 4; // the tape measure snaps to a wall this close, for wall-to-wall readings
 const MIN_VIEW_IN = 48;
 
@@ -37,7 +36,7 @@ export interface Plan2DProps {
 }
 
 export function Plan2D({ state, dragMode, onDrag, onDrop, ghost, mobility, measure, fitSignal }: Plan2DProps) {
-  const { home, position, room, prediction, trail } = state;
+  const { home, position, room, prediction } = state;
   const svg = useRef<SVGSVGElement>(null);
   const fit = useMemo<View>(() => {
     const b = bounds(home.rooms.flatMap((r) => r.polygon));
@@ -150,10 +149,6 @@ export function Plan2D({ state, dragMode, onDrag, onDrop, ghost, mobility, measu
         </text>
       )}
 
-      {trail.slice(1).map((p, i) => (
-        <line key={p.ts} x1={trail[i].x} y1={trail[i].y} x2={p.x} y2={p.y} stroke={AMBER} strokeWidth={3} strokeLinecap="round" opacity={0.15 + (0.6 * (i + 1)) / trail.length} />
-      ))}
-
       {home.anchors.map((a) => {
         const online = state.listeners[a.receiverId], rssi = state.rssi[a.receiverId];
         const strength = rssi === undefined ? 0.4 : Math.max(0.15, Math.min(1, (rssi + 100) / 60));
@@ -173,7 +168,14 @@ export function Plan2D({ state, dragMode, onDrag, onDrop, ghost, mobility, measu
         </g>
       ))}
 
-      {target && <Person target={target} confidence={ghost ? 1 : position?.confidence ?? 1} velocity={ghost ? undefined : position?.velocity} />}
+      {/* Pinpointing compares listeners with each other, so it needs at least two placed on the plan */}
+      {home.anchors.length < 2 && (
+        <text className="lm-notice" x={fit.x + fit.w / 2} y={fit.y + 18} textAnchor="middle">
+          Place at least two listeners (Edit zones) to pinpoint where the person is
+        </text>
+      )}
+      {/* The person: a trail drawn from the dot itself, a halo sized by the estimate's uncertainty, a beam where they are heading */}
+      {target && <LiveMarker target={target} velocity={ghost ? undefined : position?.velocity} spreadIn={ghost ? 10 : position?.spreadIn} trail={!ghost} />}
 
       {tape && distance(tape.a, tape.b) > 0.5 && <Tape a={tape.a} b={tape.b} />}
     </svg>
@@ -279,44 +281,6 @@ const PlanBase = memo(function PlanBase({ home, walls, here, risks, next, measur
     </g>
   );
 });
-
-function Person({ target, confidence, velocity }: { target: Vec2; confidence: number; velocity?: Vec2 }) {
-  const group = useRef<SVGGElement>(null);
-  const goal = useRef(target);
-  goal.current = target;
-
-  useEffect(() => {
-    let raf = 0, last = performance.now();
-    let cur: Vec2 | undefined;
-    const step = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
-      last = now;
-      const g = goal.current;
-      if (!cur || distance(cur, g) > JUMP_IN) cur = { ...g };
-      else {
-        const k = 1 - Math.exp(-GLIDE * dt);
-        cur = { x: cur.x + (g.x - cur.x) * k, y: cur.y + (g.y - cur.y) * k };
-      }
-      group.current?.setAttribute("transform", `translate(${cur.x.toFixed(2)} ${cur.y.toFixed(2)})`);
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const speed = velocity ? Math.hypot(velocity.x, velocity.y) : 0;
-  const heading = velocity && speed > 5 ? (Math.atan2(velocity.y, velocity.x) * 180) / Math.PI : undefined;
-  const spread = 14 + (1 - Math.max(0, Math.min(1, confidence))) * 36; // a less certain estimate draws a wider ring
-
-  return (
-    <g ref={group} className="p2-person" transform={`translate(${target.x} ${target.y})`}>
-      <circle r={spread} fill={AMBER} opacity={0.18} />
-      <circle r={spread} fill="none" stroke={AMBER} strokeWidth={1.5} opacity={0.6} />
-      {heading !== undefined && <path d="M 12 -5 L 22 0 L 12 5 Z" fill={AMBER} transform={`rotate(${heading})`} />}
-      <circle r={8} fill={AMBER} stroke="#1a1714" strokeWidth={2} />
-    </g>
-  );
-}
 
 function Tape({ a, b }: { a: Vec2; b: Vec2 }) {
   const d = distance(a, b);

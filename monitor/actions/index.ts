@@ -11,12 +11,13 @@ import { listenForAcks } from "./ntfy-acks";
 import { ESCALATION, createResponder, type EscalationProfile, type Redirect } from "./responder";
 import { createRiskEngine, isQuiet, localMinutes, resolves, ruleFor } from "./risk";
 import { RokuClient } from "./roku";
+import { loadSettings, type HouseholdSettings } from "./settings";
 import { createVoiceCaller } from "./vapi";
 
 const TICK_MS = 15_000;
 
-// Same as supabase/seed.sql, supabase/seed/aarnav.sql and the demo household. Read them from Supabase once the monitor has keys.
-const HOUSEHOLD = { patientName: "Rosa", quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" };
+// Defaults until Supabase answers, and the fallback without keys (settings.ts). Same as supabase/seed.sql.
+const DEFAULT_HOUSEHOLD: HouseholdSettings = { patientName: "Rosa", quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" };
 // A scanned home calls the TV room "Living room" as often as "TV room", so both greet.
 export const rules = (householdId: string): ZoneRule[] => [
   { id: "z1", householdId, roomKind: "front-door", kind: "exit-approach", startHour: 0, endHour: 24, action: "redirect" },
@@ -51,6 +52,8 @@ const actions: MonitorModule = {
   name: "actions",
   register(ctx) {
     const householdId = ctx.cfg.householdId;
+    // Updated in place by reload(), so the engine and responder always read the saved values.
+    const HOUSEHOLD = { ...DEFAULT_HOUSEHOLD };
     const zoneRules = rules(householdId);
     const room = (id: string) => ctx.world().rooms.find((r) => r.id === id);
     const profileName = process.env.ESCALATION_PROFILE === "real" ? "real" : "demo";
@@ -79,8 +82,12 @@ const actions: MonitorModule = {
 
     const responder = createResponder({
       householdId,
-      patientName: HOUSEHOLD.patientName,
-      timeZone: HOUSEHOLD.timezone,
+      get patientName() {
+        return HOUSEHOLD.patientName;
+      },
+      get timeZone() {
+        return HOUSEHOLD.timezone;
+      },
       profile,
       contacts: [
         { name: "Primary", phone: primary, priority: 1 },
@@ -116,6 +123,22 @@ const actions: MonitorModule = {
       "actions",
       `escalation profile ${profileName} (grace ${profile.graceS} s); twilio ${notify.live ? "live" : "dry run"}; ntfy ${notify.ntfy ? (notify.acks ? "on, acks through ntfy" : "on, acks by link") : "off"}; vapi ${voice.live ? "live" : "off"}; roku ${roku.configured ? "on" : "dry run"}`,
     );
+
+    // Saved Settings and zone rules. Runs once on start; Settings calls /household/reload after a save.
+    async function reload() {
+      const saved = await loadSettings(householdId);
+      if (saved?.household) Object.assign(HOUSEHOLD, saved.household);
+      if (saved?.rules) zoneRules.splice(0, zoneRules.length, ...saved.rules);
+      return { source: saved ? "supabase" : "defaults", patientName: HOUSEHOLD.patientName, quietHours: `${HOUSEHOLD.quietHoursStart} to ${HOUSEHOLD.quietHoursEnd}`, rules: zoneRules.length };
+    }
+    reload()
+      .then((r) => ctx.log("actions", `household from ${r.source}: quiet hours ${r.quietHours}, ${r.rules} zone rules`))
+      .catch((e) => ctx.log("actions", "household load failed, using the defaults:", (e as Error).message));
+    ctx.http.post("/household/reload", async () => {
+      const r = await reload();
+      ctx.log("actions", `household reloaded: quiet hours ${r.quietHours}, ${r.rules} zone rules`);
+      return r;
+    });
 
     // A replay (/replay/start) re-emits a recorded night for the screens only: no new risks, texts or calls.
     const live = <T>(fn: (e: T) => void) => (e: T) => {
@@ -160,7 +183,13 @@ const actions: MonitorModule = {
     });
 
     // Time away: where they are, for how long, out of bed at night, minutes per room today.
-    const dwell = createDwell({ timeZone: HOUSEHOLD.timezone, quiet: (t) => isQuiet(t, HOUSEHOLD), roomKind: (id) => room(id)?.kind });
+    const dwell = createDwell({
+      get timeZone() {
+        return HOUSEHOLD.timezone;
+      },
+      quiet: (t) => isQuiet(t, HOUSEHOLD),
+      roomKind: (id) => room(id)?.kind,
+    });
     ctx.bus.on("location", live((e) => dwell.onLocation(e.roomId)));
     ctx.http.get("/dwell", () => dwell.state());
 

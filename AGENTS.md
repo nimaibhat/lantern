@@ -56,7 +56,7 @@ monitor/world/       serves the newest home model, routes through doors
 monitor/sensing/     listener ingest, RssiWindow, SensorFrame, simulator
 monitor/inference/   room classifier, door-graph HMM, position, predictor
 monitor/actions/     risk engine, responder (grace, repeating cues), Twilio, Vapi calls, time away, TV
-tools/               dev helpers (mock-rssi, replay, check-env, find-roku, calibrate-offsets)
+tools/               dev helpers (mock-rssi, mock-walk, replay, check-env, find-roku, calibrate-offsets, position-eval, position-lag)
 docs/                runbook, project status, spike notes, cues (cues.md), Vapi setup (vapi.md)
 ml/                  RSSI training scripts and saved model
 fixtures/            sample RoomPlan JSON, RSSI CSV, photos, home model
@@ -79,6 +79,7 @@ npm install
 npm run dev            # http://localhost:3000 (Next.js)
 npm run dev:monitor    # http://localhost:8787 (monitor service, tsx watch)
 npm run dev:mock-rssi  # fake 4 listeners walking a tag through rooms
+npm run dev:mock-walk  # a pretend person walking the loaded home, heard at every placed listener (live map, trail)
 npm run build          # production build
 npm run typecheck      # web and monitor (tsconfig.json + tsconfig.monitor.json)
 npm test               # node:test via tsx: lib/** and monitor/**

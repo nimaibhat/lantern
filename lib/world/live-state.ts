@@ -13,6 +13,7 @@ export interface LivePosition {
   confidence: number;
   source: LocationSource;
   velocity?: Vec2;
+  spreadIn?: number; // inches: how far the real spot may be from x, y
 }
 
 export interface LiveRisk {
@@ -38,6 +39,7 @@ export interface LiveState {
 
 export const TRAIL_MS = 10_000;
 const PREDICTION_TTL_MS = 30_000;
+const POSITION_FRESH_MS = 2000; // positions newer than this own the room shown
 
 export const initialLive = (home: HomeModel): LiveState => ({ home, risks: {}, listeners: {}, rssi: {}, trail: [] });
 
@@ -46,13 +48,14 @@ export function applyFrame(s: LiveState, f: LiveFrame): LiveState {
     case "snapshot":
       return { ...s, home: f.home, room: f.room ?? s.room, patient: f.patient ?? s.patient, listeners: f.listeners };
     case "position": {
-      const position: LivePosition = { ts: f.ts, x: f.x, y: f.y, roomId: f.roomId, confidence: f.confidence, source: f.source, velocity: f.velocity };
+      const position: LivePosition = { ts: f.ts, x: f.x, y: f.y, roomId: f.roomId, confidence: f.confidence, source: f.source, velocity: f.velocity, spreadIn: f.spreadIn };
       const trail = [...s.trail.filter((p) => f.ts - p.ts <= TRAIL_MS && p.ts <= f.ts), { ts: f.ts, x: f.x, y: f.y }];
       const prediction = s.prediction && f.ts - s.prediction.ts < PREDICTION_TTL_MS && s.prediction.fromRoomId === f.roomId ? s.prediction : undefined;
       return { ...s, position, trail, room: f.roomId, lastSource: f.source, prediction };
     }
     case "location":
-      return { ...s, room: f.roomId, lastSource: f.source };
+      // The live dot's own room wins while positions are flowing, so the label always matches the pinpoint
+      return { ...s, room: s.position && f.ts - s.position.ts < POSITION_FRESH_MS ? s.room : f.roomId, lastSource: f.source };
     case "prediction":
       return { ...s, prediction: { fromRoomId: f.fromRoomId, nextRoomId: f.nextRoomId, probability: f.probability, ts: f.ts } };
     case "risk": {

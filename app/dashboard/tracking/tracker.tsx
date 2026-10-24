@@ -120,6 +120,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const deviceIdRef = useRef<string | null>(null);
   const latest = useRef<{ rssi: number; at: number } | null>(null);
   const watchingRef = useRef(false);
+  const bleDeviceRef = useRef<BleDevice | null>(null);
+  const adCountRef = useRef(0);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("lantern-ear");
@@ -322,7 +324,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
     if (listen && local && data.listening === false) {
-      setNote("This laptop could not start listening. Turn Bluetooth on and press Pair again.");
+      setNote("The background listener could not start. Press Pair again — Chrome will scan directly.");
       return false;
     }
     return true;
@@ -341,6 +343,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   }
 
   function onAd(event: AdEvent, strict: boolean) {
+    adCountRef.current += 1;
     const rssi = event.rssi;
     const matched = !strict || adMatches(event);
     // #region agent log
@@ -352,6 +355,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
 
   async function watchDevice(device: BleDevice): Promise<boolean> {
     if (typeof device.watchAdvertisements !== "function") return false;
+    // Store device ref so it's never garbage-collected while scanning
+    bleDeviceRef.current = device;
     device.addEventListener("advertisementreceived", (event) => onAd(event, false));
     await device.watchAdvertisements();
     return true;
@@ -361,10 +366,12 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
     const bt = bluetooth();
     if (!browserCanWatch() || !bt) return "unavailable";
+    adCountRef.current = 0;
     try {
       const device = await bt.requestDevice({
         filters: [{ namePrefix: "Lantern" }, { namePrefix: "lantern" }, { services: [SERVICE] }],
       });
+      bleDeviceRef.current = device;
       bt.addEventListener?.("advertisementreceived", (event) => onAd(event, false));
       const watching = await watchDevice(device);
       if (!watching && typeof bt.requestLEScan === "function" && bt.addEventListener) {
@@ -387,6 +394,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const device = await bt.requestDevice({
             filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
           });
+          bleDeviceRef.current = device;
           return (await watchDevice(device)) ? "watching" : "unavailable";
         } catch (again) {
           const name = again instanceof DOMException ? again.name : "";
@@ -419,7 +427,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
         return;
       }
-      // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
+      // Mac and Windows Chrome can both hear the phone via Web Bluetooth (watchAdvertisements).
       if (kind === "mac") {
         if (!window.isSecureContext) {
           setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
@@ -449,20 +457,55 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
         return;
       }
+      // Hub Windows: use the Python scanner (runs in background, reliable)
       if (here) {
         const saved = await saveLaptop(trimmed, true, true, true);
-        if (saved) setNote("This laptop is listening. Leave this page open.");
+        if (saved) {
+          setNote("This laptop is listening. Leave this page open.");
+          return;
+        }
+        // Python failed — fall through to try Web Bluetooth
+      }
+      // Non-hub (or hub Python failed): use Web Bluetooth — zero install
+      if (!window.isSecureContext) {
+        setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
         return;
       }
-      const saved = await saveLaptop(trimmed, false, false);
-      const id = deviceIdRef.current;
-      if (!saved || !id) return;
-      if (await askAgent(id)) {
-        setNote("This laptop is listening. Leave this page open.");
+      if (!bluetooth()) {
+        setNote("This browser does not support Bluetooth. Open this page in Google Chrome (not Edge or Firefox).");
         return;
       }
-      setLaunchId(id);
-      setNote("Open the Lantern file. Leave its window open until this laptop shows a dBm reading.");
+      if (browserCanWatch()) {
+        adCountRef.current = 0;
+        const watched = await listenInPage();
+        if (watched === "cancelled") {
+          setNote("Pick LanternTag in the list. Make sure LightBlue is running on the phone with LanternTag advertising.");
+          return;
+        }
+        if (watched === "watching") {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (!saved) return;
+          setNote("Scanning for signal... keep this tab in the foreground.");
+          // Check that ads actually arrive — if not, fall back to .bat
+          const before = adCountRef.current;
+          await new Promise((r) => setTimeout(r, 6000));
+          if (adCountRef.current > before && latest.current && Date.now() - latest.current.at < 8000) {
+            setNote("Connected and hearing the phone. Leave this tab open.");
+            return;
+          }
+          // Web Bluetooth isn't delivering signal — offer the .bat listener
+          setLaunchId(deviceIdRef.current);
+          setNote("Chrome paired but can't read the signal on this laptop. Click \"Open listener\" below to download a small file — open it and leave the window running.");
+          return;
+        }
+      }
+      // Web Bluetooth not available at all — save device and show .bat download
+      {
+        const saved = await saveLaptop(trimmed, false, false);
+        if (!saved) return;
+        setLaunchId(deviceIdRef.current);
+        setNote("Click \"Open listener\" below to download a small file. Open it and leave the window running — it will scan Bluetooth and send the signal to the hub.");
+      }
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {

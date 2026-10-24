@@ -12,7 +12,7 @@ import { HttpError, type Handler, type ModuleCtx } from "./module";
 import modules from "./modules";
 import { createStore } from "./store";
 
-const POSITION_MIN_GAP_MS = 200; // cap position frames to the browser at 5 Hz
+const POSITION_MIN_GAP_MS = 100; // cap position frames to the browser at 10 Hz, the fast dot's own rate
 const MAX_BODY = 1_000_000;
 
 type Route = { method: string; parts: string[]; handler: Handler };
@@ -48,7 +48,7 @@ function toLive<K extends BusEvent>(event: K, p: BusEvents[K]): LiveFrame | unde
   switch (event) {
     case "position": {
       const e = p as BusEvents["position"];
-      return { t: "position", ts: e.ts, x: e.x, y: e.y, roomId: e.roomId, confidence: e.confidence, source: e.source, velocity: e.velocity };
+      return { t: "position", ts: e.ts, x: e.x, y: e.y, roomId: e.roomId, confidence: e.confidence, source: e.source, velocity: e.velocity, spreadIn: e.spreadIn };
     }
     case "location": {
       const e = p as BusEvents["location"];

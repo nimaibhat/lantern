@@ -89,6 +89,7 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
       store.listeners[msg.receiverId] = true;
       store.tagLastSeen = now;
       window.push({ receiverId: msg.receiverId, rssi: msg.rssi, ts: msg.ts });
+      bus.emit("reading", { receiverId: msg.receiverId, rssi: msg.rssi, ts: now }); // the dot's fast path (inference/fast.ts)
     }
   }
 
@@ -125,6 +126,7 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
       store.listeners[msg.receiverId] = true;
       store.tagLastSeen = now;
       window.push({ receiverId: msg.receiverId, rssi: msg.rssi, ts: msg.ts });
+      bus.emit("reading", { receiverId: msg.receiverId, rssi: msg.rssi, ts: now }); // the dot's fast path (inference/fast.ts)
     }
     return true;
   }

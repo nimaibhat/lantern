@@ -9,7 +9,7 @@ import { localMinutes } from "../actions/risk";
 import type { MonitorModule } from "../module";
 import { InferenceEngine, type Models } from "./engine";
 
-const TICK_MS = 200;
+const TICK_MS = 100; // the fast dot steps ten times a second (inference/fast.ts)
 
 export function loadModels(dir = process.env.ML_OUT_DIR ?? "ml/out", log?: (msg: string) => void): Models {
   const read = (file: string) => {
@@ -36,6 +36,8 @@ const inference: MonitorModule = {
     const models = () => loadModels(undefined, (msg) => ctx.log("inference", msg));
     const engine = new InferenceEngine(home, models(), { hourOf, newId: randomUUID });
     ctx.log("inference", JSON.stringify(engine.describe()));
+
+    ctx.bus.on("reading", (r) => engine.onReading(r));
 
     ctx.bus.on("frame", (f) => {
       if (ctx.world().version !== home.version) { // the home model was reloaded: rebuild the door graph

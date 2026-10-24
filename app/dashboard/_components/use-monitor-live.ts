@@ -11,6 +11,7 @@ import type { Activity, LocationSource, Receiver, RiskEvent, Room } from "@/lib/
 const WS_URL = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const MONITOR = process.env.NEXT_PUBLIC_MONITOR_URL || "http://localhost:8787";
 const HEALTH_MS = 5000;
+const POSITION_FRESH_MS = 2000; // positions newer than this own the room shown
 const clock = () => new Date().toTimeString().slice(0, 5);
 
 export interface TagHealth { online: boolean; lastSeen: number | null }
@@ -33,6 +34,8 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
   const [tag, setTag] = useState<TagHealth>();
   const [dwell, setDwell] = useState<Dwell>();
   const lastState = useRef(new Map<string, string>()); // risk id -> state, so the timeline skips reminder-count updates
+  const shown = useRef("");
+  const lastPositionAt = useRef(0);
 
   useEffect(() => {
     let ws: WebSocket;
@@ -52,22 +55,28 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
         if (!closed) retry = setTimeout(connect, 3000);
       };
       ws.onerror = () => ws.close();
+      // The room shown is the room the live dot is in. A room-change event (the steadier tracker behind alerts) only
+      // moves it when no position has arrived for a moment, so the words never disagree with the dot on the plan.
+      const show = (roomId: string) => {
+        const id = resolveRoomId(rooms, roomId) ?? "";
+        if (id === shown.current) return;
+        shown.current = id;
+        setMonitorRoom(id);
+        setSince(clock());
+      };
+
       ws.onmessage = (e) => {
         try {
           const frame = JSON.parse(e.data);
 
           if (frame.t === "snapshot") {
-            if (frame.room) {
-              setMonitorRoom(resolveRoomId(rooms, frame.room) ?? "");
-              setSince(clock());
-            }
+            if (frame.room) show(frame.room);
             if (frame.listeners) setListeners(frame.listeners);
           } else if (frame.t === "listener") {
             setListeners((prev) => (prev[frame.receiverId] === frame.online ? prev : { ...prev, [frame.receiverId]: frame.online }));
           } else if (frame.t === "location") {
             seen(frame.source);
-            setMonitorRoom(resolveRoomId(rooms, frame.roomId) ?? "");
-            setSince(clock());
+            if (Date.now() - lastPositionAt.current > POSITION_FRESH_MS) show(frame.roomId);
             const from = roomName(rooms, frame.prevRoomId);
             const to = roomName(rooms, frame.roomId);
             const time = clock();
@@ -79,7 +88,8 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
             }]);
           } else if (frame.t === "position") {
             seen(frame.source);
-            setMonitorRoom(resolveRoomId(rooms, frame.roomId) ?? "");
+            lastPositionAt.current = Date.now();
+            show(frame.roomId);
           } else if (frame.t === "risk") {
             const time = clock();
             // One row per risk event: a later state (escalated, resolved) replaces the earlier one.
