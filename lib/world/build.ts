@@ -21,7 +21,7 @@ export function kindFor(name: string): RoomKind {
   if (/hall|corridor/.test(n)) return "hallway";
   if (/kitchen/.test(n)) return "kitchen";
   if (/tv|den|family/.test(n)) return "tv-room";
-  if (/door|entry|foyer|exit/.test(n)) return "front-door";
+  if (/door|entry|entrance|foyer|exit/.test(n)) return "front-door";
   if (/living|lounge/.test(n)) return "living";
   return "other";
 }

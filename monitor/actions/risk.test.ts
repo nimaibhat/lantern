@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LocationEvent, RiskEvent, RoomKind, ZoneRule } from "@/lib/types";
 import { loadConfig } from "../config";
+import { rules } from "./index";
 import { startMonitor } from "../server";
-import { BATHROOM_STAY_MS, NIGHT_WANDER_MS, NO_MOVEMENT_MS, PREDICTION_WINDOW_MS, createRiskEngine, isQuiet, localMinutes, within } from "./risk";
+import { BATHROOM_STAY_MS, NIGHT_WANDER_MS, NO_MOVEMENT_MS, PREDICTION_WINDOW_MS, createRiskEngine, isQuiet, localMinutes, ruleFor, within } from "./risk";
 
 // A winter day in New York (UTC-5), so "03:00" below is 3 AM household time.
 const at = (hhmm: string) => Date.parse(`2026-01-15T${hhmm}:00-05:00`);
@@ -98,6 +99,13 @@ test("the TV room greets instead of raising a risk", () => {
   const s = setup("10:00");
   s.enter("tv-room");
   assert.equal(s.risks.length, 0);
+});
+
+test("the monitor greets in a living room as well as a TV room, and the entrance is a front door", () => {
+  const rule = (kind: RoomKind) => ruleFor(rules("h1"), kind, at("10:00"), "America/New_York");
+  assert.equal(rule("living")?.action, "greet");
+  assert.equal(rule("tv-room")?.action, "greet");
+  assert.equal(rule("front-door")?.kind, "exit-approach");
 });
 
 test("re-entering while a risk is open does not duplicate it; after it resolves it can fire again", () => {
