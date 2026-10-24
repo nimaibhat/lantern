@@ -11,12 +11,11 @@ function utf16leBase64(text: string): string {
   return btoa(binary);
 }
 
-export function earBat(deviceId: string, postUrl: string, label: string): string {
+function earScript(deviceId: string, postUrl: string): string {
   if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
   const post = postUrl.trim().replace(/\/$/, "");
   if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
-  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
-  const script = `
+  return `
 $ErrorActionPreference = "Continue"
 $deviceId = "${deviceId}"
 $post = "${post}"
@@ -84,12 +83,44 @@ while ($null -ne $delegate) {
 }
 $watcher.remove_Received($token) | Out-Null
 `.trim();
-  const command = utf16leBase64(script);
+}
+
+export function earBat(deviceId: string, postUrl: string, label: string): string {
+  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
+  const command = utf16leBase64(earScript(deviceId, postUrl));
   return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${command}\r\n`;
+}
+
+// A single EncodedCommand of this script is about 9000 characters. Wscript runs that
+// line and PowerShell exits before it scans. Write the script in short pieces, then
+// start it with a short command.
+export function hiddenLauncher(script: string): string {
+  const encoded = utf16leBase64(script);
+  const chunks = encoded.match(/.{1,480}/g) ?? [];
+  const writes = chunks.map((chunk) => `out.Write "${chunk}"`).join("\r\n");
+  const command = [
+    "$t=$env:TEMP",
+    "$b=[IO.File]::ReadAllText((Join-Path $t 'lantern-ear.b64'))",
+    "$s=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($b -replace '\\s','')))",
+    "[IO.File]::WriteAllText((Join-Path $t 'lantern-ear.ps1'), $s)",
+    "& (Join-Path $t 'lantern-ear.ps1')",
+  ].join("; ");
+  return [
+    `Set shell = CreateObject("Wscript.Shell")`,
+    `Set fso = CreateObject("Scripting.FileSystemObject")`,
+    `folder = shell.ExpandEnvironmentStrings("%TEMP%")`,
+    `Set out = fso.CreateTextFile(folder & "\\lantern-ear.b64", True)`,
+    writes,
+    `out.Close`,
+    `shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""${command}""", 0, False`,
+    ``,
+  ].join("\r\n");
 }
 
 // Same listener as the bat, started with no window. Each Windows laptop runs its own copy.
 export function earHidden(deviceId: string, postUrl: string, label: string): string {
-  const encoded = earBat(deviceId, postUrl, label).split("-EncodedCommand ")[1]?.trim() ?? "";
-  return `Set shell = CreateObject("Wscript.Shell")\r\nshell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand ${encoded}", 0, False\r\n`;
+  const file = hiddenLauncher(earScript(deviceId, postUrl));
+  const run = file.split("shell.Run ")[1] ?? "";
+  if (run.length > 4000) throw new Error("launcher command is too long");
+  return file;
 }
