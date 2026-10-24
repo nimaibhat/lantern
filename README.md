@@ -10,6 +10,8 @@ caregiver only if that does not work.
 
 Lantern assists caregivers. It does not replace supervision and is not a medical device.
 
+![Lantern architecture](docs/architecture.png)
+
 ## What it does
 
 | Feature | How it works |
@@ -24,13 +26,8 @@ analytics, devices and settings.
 
 ## How it fits together
 
-```
-iPhone (RoomPlan scan) --upload--> Next.js app --> Supabase (Postgres, Storage)
-                                        |
-Tag phone --BLE--> laptop listeners --> monitor (:8787) --> risk rules --> TV (/routine), Twilio
-                                        |
-                                 dashboard (/dashboard) <-- live WebSocket
-```
+The diagram above shows the whole system. Edit it by opening `docs/architecture.excalidraw` in Excalidraw, then
+export it again as `docs/architecture.png`.
 
 - **Web app** (`app/`, `lib/`): Next.js App Router, React, TypeScript, plain CSS. It handles the dashboard, the
   scan upload pipeline, the audits and the patient's TV screen.
