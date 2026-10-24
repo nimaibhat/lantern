@@ -1,0 +1,615 @@
+/* Homes page (/dashboard) and Add a home (/dashboard/new). The page is the caregiver's morning; the hero is a
+   window onto last night, so it alone is dark. Tokens extend the dashboard's (dashboard.css). */
+
+.homes,
+.new-home {
+  --nw-bg: #1a1714; /* the 3D scene's background, so the canvas edge never shows */
+  --nw-line: #3a332c;
+  --nw-text: #ebe6de;
+  --nw-muted: #a3978b;
+  --nw-amber: #f5a54a;
+  --nw-amber-soft: rgba(245, 165, 74, 0.16);
+
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 20px clamp(16px, 4vw, 48px) 72px;
+}
+
+.homes-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 28px;
+}
+
+.homes-brand {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.homes :focus-visible,
+.new-home :focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Hero */
+
+.homes-intro {
+  max-width: 62ch;
+  margin-bottom: 20px;
+}
+
+.homes-intro h1 {
+  font-size: clamp(2rem, 4.2vw, 3.25rem);
+  font-weight: 300;
+  line-height: 1.05;
+  margin: 0 0 10px;
+}
+
+.homes-intro p {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--d-muted);
+}
+
+.night-window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: clamp(440px, 64vh, 660px);
+  background: var(--nw-bg);
+  color: var(--nw-text);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.nw-scene {
+  position: relative;
+  min-height: 320px;
+}
+
+.nw-scene > div:first-child,
+.nw-scene-loading {
+  position: absolute !important;
+  inset: 0;
+}
+
+.nw-plan {
+  position: absolute;
+  inset: 24px;
+  width: calc(100% - 48px);
+  height: calc(100% - 48px);
+}
+
+.nw-controls {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nw-play,
+.nw-open {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--nw-amber);
+}
+
+.nw-play {
+  background: var(--nw-amber);
+  color: #1a1410;
+}
+
+.nw-play:disabled {
+  cursor: default;
+  background: transparent;
+  color: var(--nw-amber);
+}
+
+.homes .nw-open {
+  color: var(--nw-text);
+  border-color: var(--nw-line);
+  background: rgba(23, 19, 15, 0.7);
+}
+
+.nw-open:hover {
+  border-color: var(--nw-muted);
+}
+
+.nw-log {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 28px 24px;
+  border-left: 1px solid var(--nw-line);
+}
+
+/* The one loud thing on the page: the clock of the night being replayed. */
+.nw-clock {
+  margin: 0;
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 300;
+  font-size: clamp(3.5rem, 6.5vw, 5.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--nw-amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.nw-clock span {
+  font-size: 0.3em;
+  letter-spacing: 0;
+  margin-left: 0.35em;
+  color: var(--nw-muted);
+}
+
+.nw-caption {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--nw-muted);
+}
+
+.nw-beats {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.nw-beats li {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr;
+  gap: 10px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  animation: nw-in 0.45s ease-out both;
+}
+
+.nw-beats time {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 0.85rem;
+  padding-top: 0.12em;
+  color: var(--nw-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nw-beats li.tv span {
+  color: var(--nw-amber);
+}
+
+.nw-beats .nw-waiting {
+  display: block;
+  color: var(--nw-muted);
+}
+
+.nw-tv {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--nw-muted);
+}
+
+.nw-tv::before {
+  content: "";
+  width: 30px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--nw-line);
+  background: #0f0c0a;
+  transition: background 0.6s, box-shadow 0.6s;
+}
+
+.nw-tv.on::before {
+  background: var(--nw-amber);
+  box-shadow: 0 0 18px 4px var(--nw-amber-soft);
+}
+
+.nw-result {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--nw-line);
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.1rem;
+  line-height: 1.35;
+  animation: nw-in 0.45s ease-out both;
+}
+
+@keyframes nw-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.homes-facts {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 36px;
+  color: var(--d-muted);
+  font-size: 0.95rem;
+}
+
+.homes-facts strong {
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 400;
+  font-size: 1.35rem;
+  color: var(--d-text);
+}
+
+/* Homes page: the homes grid alone, centered over the ember field */
+
+.homes {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: none;
+  padding-bottom: 48px;
+}
+
+/* Shown until WebGL draws, and kept if it never does */
+.homes::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(60% 50% at 25% 30%, rgba(244, 176, 110, 0.45), transparent 70%),
+    radial-gradient(50% 45% at 80% 75%, rgba(217, 125, 52, 0.25), transparent 70%),
+    var(--d-bg);
+}
+
+.ember-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+.ember-field[data-ready] {
+  opacity: 1;
+}
+
+.homes .homes-top {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.homes-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 6vh;
+}
+
+.homes-list h1 {
+  font-size: clamp(2.5rem, 5vw, 3.75rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  margin: 0 0 28px;
+}
+
+.homes-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 360px));
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 1128px;
+}
+
+.home-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 22px 22px 24px;
+  background: rgba(245, 242, 237, 0.82);
+  border: 1px solid var(--d-border);
+  border-radius: 20px;
+  text-decoration: none;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 40px -24px rgba(120, 62, 18, 0.35);
+  transition: border-color 0.15s, transform 0.2s ease;
+}
+
+.home-tile:hover {
+  border-color: var(--d-accent);
+  transform: translateY(-2px);
+}
+
+.home-tile .plan-thumb {
+  width: 100%;
+  height: 210px;
+  margin-bottom: 10px;
+}
+
+.home-tile-name {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.45rem;
+}
+
+.home-tile-status {
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--d-muted);
+}
+
+.home-tile-tag {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: var(--d-accent);
+  background: var(--d-accent-soft);
+}
+
+.home-tile.add {
+  background: rgba(235, 230, 222, 0.5);
+  border-style: dashed;
+  border-width: 1.5px;
+  border-color: rgba(122, 112, 103, 0.45);
+}
+
+.home-add-mark {
+  display: grid;
+  place-items: center;
+  height: 210px;
+  margin-bottom: 10px;
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 200;
+  font-size: 6rem;
+  color: var(--d-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ember-field,
+  .home-tile {
+    transition: none;
+  }
+}
+
+/* Floor plan drawing */
+
+.plan-thumb.empty {
+  border-radius: 10px;
+  background: repeating-linear-gradient(45deg, transparent 0 10px, var(--d-border) 10px 11px);
+  opacity: 0.6;
+}
+
+.pt-room {
+  fill: #e4dccf;
+  stroke: var(--d-text);
+  stroke-linejoin: round;
+}
+
+.pt-room.k-bedroom { fill: #e8dcc6; }
+.pt-room.k-kitchen { fill: #eadfd0; }
+.pt-room.k-bathroom { fill: #dfe3df; }
+.pt-room.k-hallway { fill: #ece6dc; }
+.pt-room.alert { fill: var(--nw-amber); }
+.pt-door { fill: var(--d-accent); }
+.pt-person { fill: var(--nw-amber); stroke: #fff; stroke-width: 0; }
+
+.nw-plan .pt-room { fill: #2a241f; stroke: var(--nw-muted); }
+.nw-plan .pt-room.alert { fill: #6b4318; }
+
+@media (max-width: 880px) {
+  .night-window {
+    grid-template-columns: 1fr;
+  }
+  .nw-scene {
+    min-height: min(56vh, 460px);
+  }
+  .nw-log {
+    border-left: 0;
+    border-top: 1px solid var(--nw-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nw-beats li,
+  .nw-result {
+    animation: none;
+  }
+  .nw-tv::before {
+    transition: none;
+  }
+}
+
+/* Add a home */
+
+.add-home {
+  max-width: 680px;
+}
+
+.add-home h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 300;
+  margin: 0 0 10px;
+}
+
+.add-lede {
+  margin: 0 0 32px;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--d-muted);
+}
+
+/* The steps are a real sequence, so they are numbered. */
+.add-steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-steps > li {
+  counter-increment: step;
+  position: relative;
+  padding: 18px 20px 20px 64px;
+  border: 1px solid var(--d-border);
+  border-radius: 16px;
+  color: var(--d-muted);
+}
+
+.add-steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 20px;
+  top: 16px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--d-border);
+  font-family: var(--font-heading), sans-serif;
+  font-size: 0.9rem;
+}
+
+.add-steps > li.now {
+  background: var(--d-surface);
+  color: var(--d-text);
+  border-color: var(--d-accent);
+}
+
+.add-steps > li.now::before {
+  background: var(--d-accent);
+  border-color: var(--d-accent);
+  color: #fff;
+}
+
+.add-steps > li.done::before {
+  content: "✓";
+  color: var(--d-ok);
+  border-color: var(--d-ok);
+}
+
+.add-steps h2 {
+  margin: 2px 0 10px;
+  font-size: 1.15rem;
+}
+
+.add-steps p {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.9rem;
+  color: var(--d-muted);
+}
+
+.add-form input {
+  font: inherit;
+  font-size: 1rem;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--d-border);
+  background: var(--d-bg);
+  color: var(--d-text);
+}
+
+.add-form input:focus {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 1px;
+}
+
+.add-pair {
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px 28px;
+}
+
+.add-pair dt {
+  font-size: 0.85rem;
+  color: var(--d-muted);
+  margin-bottom: 4px;
+}
+
+.add-pair dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 1.05rem;
+  word-break: break-all;
+}
+
+.add-code {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 2.2rem !important;
+  letter-spacing: 0.12em;
+  color: var(--d-accent);
+}
+
+.add-status {
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.05rem;
+}
+
+.add-error {
+  color: var(--d-alert);
+}
+
+.linkish {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--d-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .add-pair {
+    grid-template-columns: 1fr;
+  }
+}

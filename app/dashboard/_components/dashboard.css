@@ -946,3 +946,26 @@ body:has(.dash.night) {
   .media-actions { align-items: flex-start; }
 }
 .media-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Back to the Homes page, and the view-only marker on the shared demo home. */
+.sidebar .homes-link {
+  display: block;
+  padding: 0 12px;
+  margin-top: -22px;
+  font-size: 0.85rem;
+  color: var(--d-muted);
+  text-decoration: none;
+}
+.sidebar .homes-link:hover { color: var(--d-text); }
+
+.readonly-tag {
+  margin-left: 10px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--d-accent);
+  background: var(--d-accent-soft);
+}
+
+/* Full-screen pages without the sidebar (the Homes page, Add a home). */
+.dash.bare { display: block; }

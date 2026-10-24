@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { shareToken } from "@/lib/audit/share";
 import { getAuditItems, getRooms } from "@/lib/dashboard/data";
-import { HOUSEHOLD_ID } from "@/lib/supabase/server";
+import { currentHouseholdId } from "@/lib/households";
 import { AuditReport } from "../audit-report";
 
 // The report for one scan: only the rooms that scan produced.
@@ -16,7 +16,7 @@ export default async function ScanAuditPage({ params }: { params: Promise<{ scan
       initialItems={items.filter((a) => ids.has(a.roomId))}
       rooms={rooms}
       subtitle={`Scan ${scanId.slice(0, 8)}, ${rooms.length} rooms.`}
-      shareUrl={`/dashboard/audit/share/${shareToken(HOUSEHOLD_ID)}`}
+      shareUrl={`/dashboard/audit/share/${shareToken(await currentHouseholdId())}`}
     />
   );
 }

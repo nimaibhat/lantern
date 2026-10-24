@@ -8,5 +8,6 @@ const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Null when the env is not filled in, in which case lib/data.ts falls back to mock data.
 export const db = url && secret ? createClient(url, secret, { auth: { persistSession: false } }) : null;
 
-// No login yet, so everything reads the seeded demo household (supabase/seed.sql).
+// The seeded demo household (supabase/seed.sql): the one home the monitor watches. Dashboard pages read the home
+// being viewed from lib/households.ts instead.
 export const HOUSEHOLD_ID = process.env.DEMO_HOUSEHOLD_ID ?? "h1";

@@ -1,6 +1,6 @@
 // Sidebar entries. Each owner adds their page here instead of editing the shell.
 export const NAV = [
-  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/overview", label: "Overview" },
   { href: "/dashboard/world", label: "World" },
   { href: "/dashboard/rooms", label: "Rooms" },
   { href: "/dashboard/audit", label: "Audit" },

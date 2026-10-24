@@ -1,7 +1,9 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import * as mock from "./mock";
-import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
+import { currentHouseholdId, DEMO_HOUSEHOLD_ID } from "@/lib/households";
+import { db } from "@/lib/supabase/server";
 import type { Activity, AuditItem, Contact, Household, Receiver, RiskEvent, Room, RoutineStep, ScanSummary } from "@/lib/types";
 
 // Reads for the dashboard. Each function maps database rows (snake_case) to the shared types.
@@ -36,8 +38,11 @@ if (!db) console.warn("Supabase env is not set; the dashboard is using mock data
 // cache() lets the layout and the page share one query per request.
 export const getHousehold = cache(async (): Promise<Household> => {
   if (!db) return mock.household;
-  const [h] = rows(await db.from("households").select().eq("id", HOUSEHOLD_ID));
-  if (!h) throw new Error(`Household ${HOUSEHOLD_ID} not found. Run supabase/seed.sql.`);
+  const id = await currentHouseholdId();
+  const [h] = rows(await db.from("households").select().eq("id", id));
+  // A saved home that no longer exists: go back to the demo home (the route resets the cookie).
+  if (!h && id !== DEMO_HOUSEHOLD_ID) redirect(`/dashboard/h/${DEMO_HOUSEHOLD_ID}`);
+  if (!h) throw new Error(`Household ${id} not found. Run supabase/seed.sql.`);
   return {
     id: h.id,
     name: h.name,
@@ -48,9 +53,10 @@ export const getHousehold = cache(async (): Promise<Household> => {
   };
 });
 
-export const getRooms = cache(async (): Promise<Room[]> => {
+// householdId: a specific home (the shared audit link); otherwise the home being viewed.
+export const getRooms = cache(async (householdId?: string): Promise<Room[]> => {
   if (!db) return mock.rooms;
-  const list = rows(await db.from("rooms").select().eq("household_id", HOUSEHOLD_ID).order("name"));
+  const list = rows(await db.from("rooms").select().eq("household_id", householdId ?? (await currentHouseholdId())).order("name"));
   const urls = await signPhotos(list.flatMap((r) => r.photo_paths));
   return list.map((r) => ({
     id: r.id,
@@ -76,7 +82,7 @@ export const getRooms = cache(async (): Promise<Room[]> => {
 export async function getLatestScan(): Promise<ScanSummary | null> {
   if (!db) return null;
   const { timezone } = await getHousehold();
-  const res = await db.from("scans").select().eq("household_id", HOUSEHOLD_ID).order("created_at", { ascending: false }).limit(1);
+  const res = await db.from("scans").select().eq("household_id", await currentHouseholdId()).order("created_at", { ascending: false }).limit(1);
   const [scan] = rows(res);
   if (!scan) return null;
   const sameDay = new Date(scan.created_at).toDateString() === new Date().toDateString();
@@ -92,7 +98,7 @@ export async function getLatestScan(): Promise<ScanSummary | null> {
 
 export async function getContacts(): Promise<Contact[]> {
   if (!db) return mock.contacts;
-  return rows(await db.from("contacts").select().eq("household_id", HOUSEHOLD_ID).order("priority")).map((c) => ({
+  return rows(await db.from("contacts").select().eq("household_id", await currentHouseholdId()).order("priority")).map((c) => ({
     id: c.id,
     name: c.name,
     relation: c.relation,
@@ -104,7 +110,7 @@ export async function getContacts(): Promise<Contact[]> {
 export async function getReceivers(): Promise<Receiver[]> {
   if (!db) return mock.receivers;
   const now = Date.now();
-  return rows(await db.from("receivers").select().eq("household_id", HOUSEHOLD_ID).order("label")).map((r) => ({
+  return rows(await db.from("receivers").select().eq("household_id", await currentHouseholdId()).order("label")).map((r) => ({
     id: r.id,
     label: r.label,
     roomId: r.room_id,
@@ -112,9 +118,9 @@ export async function getReceivers(): Promise<Receiver[]> {
   }));
 }
 
-export async function getAuditItems(): Promise<AuditItem[]> {
+export async function getAuditItems(householdId?: string): Promise<AuditItem[]> {
   if (!db) return mock.auditItems;
-  const list = rows(await db.from("audit_items").select().eq("household_id", HOUSEHOLD_ID).order("created_at"));
+  const list = rows(await db.from("audit_items").select().eq("household_id", householdId ?? (await currentHouseholdId())).order("created_at"));
   const urls = await signPhotos(list.map((a) => a.photo_path).filter(Boolean));
   return list.map((a) => ({
     id: a.id,
@@ -137,7 +143,7 @@ export async function getAuditItems(): Promise<AuditItem[]> {
 
 export async function getRoutineSteps(): Promise<RoutineStep[]> {
   if (!db) return mock.routineSteps;
-  return rows(await db.from("routine_steps").select().eq("household_id", HOUSEHOLD_ID).order("time")).map((s, i) => ({
+  return rows(await db.from("routine_steps").select().eq("household_id", await currentHouseholdId()).order("time")).map((s, i) => ({
     id: s.id,
     routineId: s.routine_id,
     order: i + 1,
@@ -153,7 +159,7 @@ export async function getRoutineSteps(): Promise<RoutineStep[]> {
 export async function getActivity(): Promise<Activity[]> {
   if (!db) return mock.timeline;
   const { timezone } = await getHousehold();
-  const res = await db.from("activity").select().eq("household_id", HOUSEHOLD_ID).order("ts", { ascending: false }).limit(50);
+  const res = await db.from("activity").select().eq("household_id", await currentHouseholdId()).order("ts", { ascending: false }).limit(50);
   return rows(res)
     .reverse()
     .map((a) => ({ id: a.id, kind: a.kind, text: a.text, time: clockIn(a.ts, timezone) }));
@@ -162,7 +168,7 @@ export async function getActivity(): Promise<Activity[]> {
 export async function getRiskEvents(): Promise<RiskEvent[]> {
   if (!db) return mock.riskEvents;
   const { timezone } = await getHousehold();
-  const res = await db.from("risk_events").select().eq("household_id", HOUSEHOLD_ID).order("started_at", { ascending: false }).limit(10);
+  const res = await db.from("risk_events").select().eq("household_id", await currentHouseholdId()).order("started_at", { ascending: false }).limit(10);
   return rows(res).map((r) => ({
     id: r.id,
     householdId: r.household_id,

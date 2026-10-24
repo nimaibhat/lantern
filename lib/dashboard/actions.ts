@@ -2,19 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { createPairCode } from "@/lib/scan/pairing";
-import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
+import { currentHouseholdId, writableHouseholdId } from "@/lib/households";
+import { db } from "@/lib/supabase/server";
 import type { AuditStatus, RoomPreview, RoutineStep } from "@/lib/types";
 import { checkWorld, startWorld } from "@/lib/scan/worldlabs";
 
-// Writes from the dashboard. These run on the server with the secret key.
-// There is no login yet, so they are limited to the demo household; add an auth check here before going public.
+// Writes from the dashboard. These run on the server with the secret key, scoped to the home being viewed
+// (lib/households.ts). On the public deploy the demo home is read-only, so these throw there.
 
 const STATUSES: AuditStatus[] = ["open", "accepted", "dismissed", "fixed"];
 
 export async function setAuditStatus(id: string, status: AuditStatus) {
   if (!STATUSES.includes(status)) throw new Error("Invalid status");
   if (!db) return;
-  const { error } = await db.from("audit_items").update({ status }).eq("id", id).eq("household_id", HOUSEHOLD_ID);
+  const householdId = await writableHouseholdId();
+  const { error } = await db.from("audit_items").update({ status }).eq("id", id).eq("household_id", householdId);
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard", "layout");
 }
@@ -28,7 +30,7 @@ export async function addRoutineStep(input: { time: string; title: string; roomI
 
   const { error } = await db.from("routine_steps").insert({
     id: step.id,
-    household_id: HOUSEHOLD_ID,
+    household_id: await writableHouseholdId(),
     routine_id: step.routineId,
     time: step.time,
     title: step.title,
@@ -41,20 +43,20 @@ export async function addRoutineStep(input: { time: string; title: string; roomI
 
 export async function removeRoutineStep(id: string) {
   if (!db) return;
-  const { error } = await db.from("routine_steps").delete().eq("id", id).eq("household_id", HOUSEHOLD_ID);
+  const { error } = await db.from("routine_steps").delete().eq("id", id).eq("household_id", await writableHouseholdId());
   if (error) throw new Error(error.message);
   revalidatePath("/routine");
 }
 
 // A short code the caregiver types into the iPhone scanning app.
 export async function pairPhone() {
-  return createPairCode(HOUSEHOLD_ID);
+  return createPairCode(await writableHouseholdId());
 }
 
 // Starts a World Labs 3D preview from the room's photos. Takes about 5 minutes; the page polls refreshRoomPreview.
 export async function generateRoomPreview(roomId: string): Promise<RoomPreview> {
   if (!db) throw new Error("Supabase is not configured");
-  const { data: room } = await db.from("rooms").select("name, photo_paths").eq("id", roomId).eq("household_id", HOUSEHOLD_ID).maybeSingle();
+  const { data: room } = await db.from("rooms").select("name, photo_paths").eq("id", roomId).eq("household_id", await writableHouseholdId()).maybeSingle();
   if (!room) throw new Error("Room not found");
   if (!room.photo_paths.length) throw new Error("Scan this room with photos first");
 
@@ -69,7 +71,7 @@ export async function generateRoomPreview(roomId: string): Promise<RoomPreview> 
 
 export async function refreshRoomPreview(roomId: string): Promise<RoomPreview> {
   if (!db) throw new Error("Supabase is not configured");
-  const { data: room } = await db.from("rooms").select("preview_status, preview_operation_id").eq("id", roomId).eq("household_id", HOUSEHOLD_ID).maybeSingle();
+  const { data: room } = await db.from("rooms").select("preview_status, preview_operation_id").eq("id", roomId).eq("household_id", await currentHouseholdId()).maybeSingle();
   if (!room?.preview_operation_id || room.preview_status !== "generating") return { status: room?.preview_status ?? "none" };
 
   const result = await checkWorld(room.preview_operation_id);
