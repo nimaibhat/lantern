@@ -89,6 +89,8 @@ test("slug and kind", () => {
   assert.equal(kindFor("Master Bedroom"), "bedroom");
   assert.equal(kindFor("Front door"), "front-door");
   assert.equal(kindFor("Den"), "tv-room");
+  assert.equal(kindFor("Entrance"), "front-door");
+  assert.equal(kindFor("Living room"), "living");
 });
 
 test("normalize: turnDeg turns the plan clockwise to match a paper floor plan", () => {

@@ -16,11 +16,13 @@ const TICK_MS = 15_000;
 
 // Same as supabase/seed.sql, supabase/seed/aarnav.sql and the demo household. Read them from Supabase once the monitor has keys.
 const HOUSEHOLD = { patientName: "Rosa", quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" };
-const rules = (householdId: string): ZoneRule[] => [
+// A scanned home calls the TV room "Living room" as often as "TV room", so both greet.
+export const rules = (householdId: string): ZoneRule[] => [
   { id: "z1", householdId, roomKind: "front-door", kind: "exit-approach", startHour: 0, endHour: 24, action: "redirect" },
   { id: "z2", householdId, roomKind: "kitchen", kind: "kitchen-night", startHour: 22, endHour: 6, action: "redirect" },
   { id: "z3", householdId, roomKind: "bathroom", startHour: 22, endHour: 6, action: "allow" },
   { id: "z4", householdId, roomKind: "tv-room", startHour: 8, endHour: 20, action: "greet" },
+  { id: "z5", householdId, roomKind: "living", startHour: 8, endHour: 20, action: "greet" },
 ];
 
 const RISK_KINDS: RiskKind[] = ["exit-approach", "night-wandering", "kitchen-night", "long-bathroom-stay", "no-movement"];

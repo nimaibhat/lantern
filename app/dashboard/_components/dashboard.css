@@ -18,29 +18,11 @@
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
-.dash.night {
-  --d-bg: #1a1714;
-  --d-surface: #24201c;
-  --d-border: #3a332c;
-  --d-text: #ebe6de;
-  --d-muted: #9a8f84;
-  --d-accent: #f5a54a;
-  --d-accent-soft: rgba(245, 165, 74, 0.14);
-  --d-alert: #e0664d;
-  --d-ok: #7fb083;
-}
-
 /* Overscroll and the area behind the page match the dashboard instead of the dark landing. */
 html:has(.dash),
 body:has(.dash) {
   background: #ebe6de;
   color-scheme: light;
-}
-
-html:has(.dash.night),
-body:has(.dash.night) {
-  background: #1a1714;
-  color-scheme: dark;
 }
 
 .dash a {

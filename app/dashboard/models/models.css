@@ -11,12 +11,6 @@
   gap: 20px;
 }
 
-.dash.night .models {
-  --m-accent: #cc7c30;
-  --m-context: #6b625a;
-  --m-on-accent: #1a1714;
-}
-
 .m-sim { color: var(--d-accent); border-color: var(--d-accent); }
 
 .m-note {
