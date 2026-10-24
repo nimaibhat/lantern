@@ -9,10 +9,14 @@ import { BUS_EVENTS, Bus, type BusEvent } from "./bus";
 import type { Config } from "./config";
 import { log } from "./log";
 import { HttpError, type Handler, type ModuleCtx } from "./module";
+import modules from "./modules";
 import { createStore } from "./store";
+
 const POSITION_MIN_GAP_MS = 200; // cap position frames to the browser at 5 Hz
 const MAX_BODY = 1_000_000;
+
 type Route = { method: string; parts: string[]; handler: Handler };
+
 // "/ack/:alertId" matches "/ack/42" with params { alertId: "42" }.
 function match(route: Route, method: string, parts: string[]): Record<string, string> | undefined {
   if (route.method !== method || route.parts.length !== parts.length) return;
@@ -37,6 +41,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
     throw new HttpError(400, "body is not valid JSON");
   }
 }
+
 // Bus events become LiveFrames for the browser. frame (raw RSSI) stays inside the monitor.
 function toLive<K extends BusEvent>(event: K, p: BusEvents[K]): LiveFrame | undefined {
   const now = Date.now();
@@ -72,15 +77,24 @@ export async function startMonitor(cfg: Config) {
 
   const ctx: ModuleCtx = {
     http: { get: add("GET"), post: add("POST") },
+    bus,
+    store,
+    cfg,
+    log,
     world() {
       if (!store.world) throw new Error("no home model loaded");
       return store.world;
+    },
+  };
+
   bus.on("location", (e) => (store.room = e.roomId));
+
   ctx.http.get("/health", () => ({
     ok: true,
     uptimeS: Math.round((Date.now() - started) / 1000),
     listeners: store.listeners,
     tagLastSeen: store.tagLastSeen ?? null,
+  }));
 
   // Emit any bus event by hand. This is how the web, 3D view and responder are tested without Bluetooth.
   ctx.http.post("/debug/emit", ({ body }) => {
@@ -89,14 +103,19 @@ export async function startMonitor(cfg: Config) {
     if (!BUS_EVENTS.includes(event as BusEvent)) throw new HttpError(400, `event must be one of ${BUS_EVENTS.join(", ")}`);
     if (!payload || typeof payload !== "object") throw new HttpError(400, "payload must be an object");
     return { emitted: bus.emit(event as BusEvent, payload as never) };
+  });
+
   for (const m of modules) {
     await m.register(ctx);
     log("monitor", `registered ${m.name}`);
+  }
+
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     res.setHeader("Access-Control-Allow-Origin", cfg.corsOrigin);
     res.setHeader("Access-Control-Allow-Headers", "content-type");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     if (req.method === "OPTIONS") return void res.writeHead(204).end();
+
     const url = new URL(req.url ?? "/", "http://monitor");
     const parts = url.pathname.split("/").filter(Boolean);
     const send = (status: number, data: unknown) => {
@@ -106,33 +125,110 @@ export async function startMonitor(cfg: Config) {
     for (const route of routes) {
       const params = match(route, req.method ?? "GET", parts);
       if (!params) continue;
+      try {
         const body = req.method === "POST" ? await readJson(req) : undefined;
         return send(200, await route.handler({ body, query: url.searchParams, params }));
       } catch (e) {
         if (e instanceof HttpError) return send(e.status, { error: e.message });
         log("http", `${req.method} ${url.pathname} failed`, e);
         return send(500, { error: "internal error" });
+      }
+    }
     send(404, { error: "not found" });
+  });
+
+  // --- /ws/listener for BLE listeners ---
+  const listenerWss = new WebSocketServer({ noServer: true });
   const ingest = (ctx as unknown as Record<string, unknown>)._ingest as
+    | { handleRaw(ws: import("ws").WebSocket, raw: string, token: string): void }
+    | undefined;
+
+  listenerWss.on("connection", (ws, req) => {
     const url = new URL(req.url ?? "/", "http://monitor");
+    const token = url.searchParams.get("token") ?? "";
+    ws.on("message", (data) => {
+      if (ingest) ingest.handleRaw(ws, data.toString(), token);
+    });
+  });
+
+  // --- recorder: save bus events to JSONL ---
+  let recordingStream: import("node:fs").WriteStream | null = null;
+  let recordingId: string | null = null;
+
+  function recordEvent(k: string, d: unknown) {
+    if (!recordingStream) return;
+    recordingStream.write(JSON.stringify({ k, ts: Date.now(), d }) + "\n");
+  }
+  for (const ev of BUS_EVENTS) {
+    bus.on(ev, (p) => recordEvent(ev, p));
+  }
+
+  ctx.http.post("/record/start", () => {
+    if (recordingStream) throw new HttpError(409, "already recording");
+    const fs = require("node:fs");
+    const path = require("node:path");
+    recordingId = `rec-${Date.now()}`;
+    const dir = path.resolve("fixtures/sessions");
+    fs.mkdirSync(dir, { recursive: true });
+    recordingStream = fs.createWriteStream(path.join(dir, `${recordingId}.jsonl`));
+    log("record", `started: ${recordingId}`);
+    return { ok: true, session: recordingId };
+  });
+
+  ctx.http.post("/record/stop", () => {
+    if (!recordingStream) throw new HttpError(409, "not recording");
+    recordingStream.end();
+    log("record", `stopped: ${recordingId}`);
+    const id = recordingId;
+    recordingStream = null;
+    recordingId = null;
+    return { ok: true, session: id };
+  });
+
   const live = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
     const path = new URL(req.url ?? "/", "http://monitor").pathname;
+    if (path === "/ws/live") {
       live.handleUpgrade(req, socket, head, (ws) => live.emit("connection", ws, req));
+    } else if (path === "/ws/listener") {
+      listenerWss.handleUpgrade(req, socket, head, (ws) => listenerWss.emit("connection", ws, req));
+    } else {
+      socket.destroy();
+    }
+  });
+
   live.on("connection", (ws) => {
     ws.send(JSON.stringify(snapshot));
+  });
+
   const broadcast = (frame: LiveFrame) => {
+    const msg = JSON.stringify(frame);
     for (const ws of live.clients) if (ws.readyState === WebSocket.OPEN) ws.send(msg);
   };
   for (const event of BUS_EVENTS) {
     bus.on(event, (payload) => {
       if (event === "position") {
         const frame = toLive(event, payload as BusEvents[typeof event]);
+      }
+      if (event === "frame") {
+        // Broadcast per-receiver RSSI as listener frames so Devices can show live dBm
+        const f = payload as BusEvents["frame"];
+        const now = Date.now();
+        for (let i = 0; i < f.order.length; i++) {
+          const rid = f.order[i];
+          broadcast({ t: "listener", ts: now, receiverId: rid, online: f.online[rid] ?? false, rssi: f.rssi[i] });
+        }
+        return;
+      }
       const frame = toLive(event, payload as BusEvents[typeof event]);
       if (frame) broadcast(frame);
+    });
+  }
+
   await new Promise<void>((resolve) => server.listen(cfg.port, resolve));
   const port = (server.address() as AddressInfo).port;
   log("monitor", `listening on http://localhost:${port} (debug ${cfg.debug ? "on" : "off"})`);
+
   return {
     port,
     bus,
@@ -140,8 +236,12 @@ export async function startMonitor(cfg: Config) {
     close: () =>
       new Promise<void>((resolve) => {
         const ig = (ctx as unknown as Record<string, unknown>)._ingest as { stop?(): void } | undefined;
+        ig?.stop?.();
         for (const ws of live.clients) ws.terminate();
+        for (const ws of listenerWss.clients) ws.terminate();
         live.close();
+        listenerWss.close();
         server.close(() => resolve());
       }),
   };
+}

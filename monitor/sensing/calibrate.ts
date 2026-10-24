@@ -15,6 +15,14 @@ import { HttpError, type ModuleCtx } from "../module";
 
 const NO_READING = -100;
 
+// Home-model ids and the rooms table do not use the same slugs. A label that is not a rooms.id
+// is rejected by the foreign key, so the whole insert is dropped.
+const LABEL_ROOM: Record<string, string> = {
+  "tv-room": "living",
+  "living-room": "living",
+  "front-door": "entry",
+};
+
 export const csvHeader = (order: string[]) => ["session", "ts", "roomId", "x", "y", ...order].join(",");
 
 // One frame as one CSV line. Coordinates are empty unless the sample was taken on a known floor point.
@@ -73,6 +81,7 @@ export function registerCalibration(ctx: ModuleCtx, opts: { csvPath?: string } =
           receiver_id: r.receiverId,
           beacon_id: active!.beaconId,
           rssi: Math.round(r.rssi),
+          label_room_id: LABEL_ROOM[roomId] ?? roomId,
           session,
           x: x ?? null,
           y: y ?? null,
