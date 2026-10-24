@@ -421,12 +421,20 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       }
       // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
       if (kind === "mac") {
+        if (!window.isSecureContext) {
+          setNote("Bluetooth requires HTTPS. Open this page at: https://" + location.hostname + ":" + (location.port || "3000") + location.pathname);
+          return;
+        }
+        if (!bluetooth()) {
+          setNote("Chrome cannot access Bluetooth. Check System Settings > Privacy & Security > Bluetooth and make sure Chrome is allowed.");
+          return;
+        }
         const watched = await listenInPage();
         // #region agent log
         fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal: here, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
         // #endregion
         if (watched === "cancelled") {
-          setNote("Pick LanternTag in the list.");
+          setNote("Pick LanternTag in the list. Make sure LightBlue is running on the phone with LanternTag advertising.");
           return;
         }
         if (watched === "watching") {
@@ -434,7 +442,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
           return;
         }
-        setNote("Chrome on this Mac could not hear the phone. Press Pair again and choose LanternTag.");
+        setNote("Chrome could not start Bluetooth scanning. Make sure Bluetooth is on, and that this page is open via HTTPS (not HTTP).");
         return;
       }
       if (kind !== "windows") {
