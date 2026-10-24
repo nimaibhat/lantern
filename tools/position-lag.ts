@@ -24,7 +24,10 @@ const WALL_DB = Number(flag("--wall") ?? 6); // the simulated home's real loss p
 const r = rng(20261024);
 
 // Listeners the room model knows, with a position in the home
-const order: string[] = (knn?.order ?? home.anchors.map((a) => a.receiverId)).filter((id: string) => home.anchors.some((a) => a.receiverId === id));
+// The room model's listeners when it was trained on this home; for any other home, every placed listener
+const placed = [...new Set(home.anchors.map((a) => a.receiverId))];
+const fits = knn && knn.rooms.every((r: string) => home.rooms.some((x) => x.id === r));
+const order: string[] = fits ? knn.order.filter((id: string) => placed.includes(id)) : placed;
 
 // Raw readings: each listener about every 200 ms, as Radio hears them
 function readings(track: Vec2[]) {
@@ -72,11 +75,13 @@ const sweep = args.includes("--sweep");
 const pipelines: [string, EngineOptions, boolean, number][] = sweep
   ? [250, 400, 550].flatMap((tauMs) => [300, 500].flatMap((leadMs) => [6, 9].map((stillIn): [string, EngineOptions, boolean, number] =>
       [`tau ${tauMs} lead ${leadMs} still ${stillIn}`, { live: { tauMs, leadMs, floor: { stillIn } } }, true, 100])))
-  : [
-      ["today: centroid, 1 s frames", { positioner: "centroid", live: false }, false, 200],
-      ["floor grid, 1 s frames", { positioner: "grid", live: false }, false, 200],
-      ["fast: raw readings, 10 Hz", {}, true, 100],
-    ];
+  : args.includes("--stick")
+    ? [1, 0.6, 0.4, 0.25].map((doorStick): [string, EngineOptions, boolean, number] => [`fast, door stick ${doorStick}`, { live: { floor: { doorStick } } }, true, 100])
+    : [
+        ["today: centroid, 1 s frames", { positioner: "centroid", live: false }, false, 200],
+        ["floor grid, 1 s frames", { positioner: "grid", live: false }, false, 200],
+        ["fast: raw readings, 10 Hz", {}, true, 100],
+      ];
 
 for (const [label, opts, raw, tickMs] of pipelines) {
   const runs = data.map((d) => ({ d, r: run(opts, raw, tickMs, d.track, d.heard) }));
@@ -95,5 +100,13 @@ for (const [label, opts, raw, tickMs] of pipelines) {
   const wobble = median(runs.flatMap(({ d, r }) => r.slice(1).filter(({ truthIdx }, i) => truthIdx >= 20 && r[i].truthIdx >= 0
     && Math.hypot(d.track[truthIdx].x - d.track[truthIdx - 20].x, d.track[truthIdx].y - d.track[truthIdx - 20].y) < 1)
     .map(({ p }, i, list) => (i ? Math.hypot(p.x - list[i - 1].p.x, p.y - list[i - 1].p.y) * (1000 / tickMs) : 0))));
-  console.log(`${label.padEnd(30)} error now ${String(Math.round(errAt(0))).padStart(3)} in | lag ${lag.toFixed(1)} s | after a doorway ${String(Math.round(doorway)).padStart(3)} in | wobble still ${String(Math.round(wobble)).padStart(2)} in/s`);
+  // How often the room shown is the room the person is really in
+  // Label churn: how often the room shown changes, per minute, against how often the person really changes room
+  const changes = (list: string[]) => list.slice(1).filter((r, i) => r !== list[i]).length;
+  const minutes = runs.reduce((m, { r }) => m + (r.length * tickMs) / 60000, 0);
+  const churn = runs.reduce((n, { r }) => n + changes(r.map(({ p }) => p.roomId)), 0) / minutes;
+  const real = runs.reduce((n, { d, r }) => n + changes(r.map(({ truthIdx }) => d.roomAt[truthIdx])), 0) / minutes;
+  const shownRight = runs.flatMap(({ d, r }) => r.map(({ p, truthIdx }) => (p.roomId === d.roomAt[truthIdx] ? 1 : 0)));
+  const roomRight = Math.round((100 * shownRight.reduce((a: number, b: number) => a + b, 0)) / Math.max(shownRight.length, 1));
+  console.log(`${label.padEnd(30)} room shown right ${roomRight}% | label changes ${churn.toFixed(1)}/min (real ${real.toFixed(1)}) | error now ${String(Math.round(errAt(0))).padStart(3)} in | lag ${lag.toFixed(1)} s | after a doorway ${String(Math.round(doorway)).padStart(3)} in | wobble still ${String(Math.round(wobble)).padStart(2)} in/s`);
 }

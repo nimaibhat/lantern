@@ -6,7 +6,7 @@
 // Only the dot comes from here. Room changes, alerts and predictions stay on the steadier one-second path.
 
 import type { HomeModel, Vec2 } from "@/lib/types";
-import { roomAt } from "@/lib/world/geometry";
+import { edgeDistance, innerPoint, roomAt } from "@/lib/world/geometry";
 import { FloorFilter, type FloorFilterOptions } from "./floor-filter";
 
 export interface FastOptions {
@@ -23,9 +23,10 @@ const CLIP_DB = 10; // one odd reading moves a level at most this far
 const WALL_CANDIDATES = [2, 4, 6, 9, 12]; // dB per wall: from thin partitions to brick
 const WALL_HALF_LIFE_S = 120; // walls are judged on the last few minutes of readings
 const WALL_EVERY_MS = 30_000; // and switched at most this often, only when clearly better
+const LABEL_IN = 18; // the label moves to a new room once the dot is this far inside it (less in a narrow room), so a doorway does not flicker
 const CATCH_UP = 120; // in/s: fast enough to catch up after a doorway, slow enough that the dot never jumps across the plan
 
-export interface FastEstimate { x: number; y: number; spreadIn: number; room: string; velocity: Vec2 }
+export interface FastEstimate { x: number; y: number; spreadIn: number; room: string; share: number; velocity: Vec2 } // room: where the dot is; share: belief in that room
 
 export class FastPositioner {
   private level = new Map<string, { v: number; ts: number }>();
@@ -34,6 +35,9 @@ export class FastPositioner {
   private prev?: { x: number; y: number; ts: number };
   private vel: Vec2 = { x: 0, y: 0 };
   private shown?: { x: number; y: number; ts: number }; // the dot as drawn: it walks, through doorways, toward the estimate
+  private label?: string; // the room the dot is in, with a little hysteresis at doorways
+  private depth: Record<string, number>; // how far from its walls each room's most open spot is
+  private last?: FastEstimate;
   private wallScore = WALL_CANDIDATES.map(() => 0);
   private wallAt = { judged: 0, chose: 0 };
   lastReadingTs = 0;
@@ -41,6 +45,7 @@ export class FastPositioner {
   constructor(private home: HomeModel, opts: FastOptions = {}) {
     this.o = { ...FAST_DEFAULTS, ...opts };
     this.grid = new FloorFilter(home, { ...FAST_FLOOR, ...opts.floor });
+    this.depth = Object.fromEntries(home.rooms.map((r) => [r.id, r.polygon.length >= 3 ? edgeDistance(innerPoint(r.polygon), r.polygon) : 0]));
   }
 
   get ready() { return this.grid.ready; }
@@ -50,6 +55,8 @@ export class FastPositioner {
     this.grid.reset();
     this.prev = undefined;
     this.shown = undefined;
+    this.label = undefined;
+    this.last = undefined;
     this.vel = { x: 0, y: 0 }; // the learned walls stay: they belong to the home, not to this stretch of readings
   }
 
@@ -74,7 +81,7 @@ export class FastPositioner {
     // Each step sees mostly the same smoothed levels as the last, so it counts as a fraction of one reading
     if (!this.grid.step(order, rssi, online, roomBelief, Math.min(1, this.o.stepMs / this.o.tauMs))) return;
     this.learnWalls(ts, order, rssi, online);
-    const est = this.grid.estimate();
+    const est = this.grid.locate();
     if (!est) return;
 
     if (this.prev && ts > this.prev.ts) {
@@ -88,7 +95,25 @@ export class FastPositioner {
     const ahead = { x: est.x + this.vel.x * lead, y: est.y + this.vel.y * lead };
     const goal = this.grid.clear(est, ahead) && roomAt(this.home, ahead) ? ahead : est;
     const p = this.walk(goal, ts);
-    return { x: p.x, y: p.y, spreadIn: est.spreadIn, room: roomAt(this.home, p)?.id ?? est.room, velocity: this.vel };
+
+    // The location shown is the room the dot is standing in, so the words and the pinpoint always agree
+    const here = roomAt(this.home, p)?.id ?? est.room;
+    if (!this.label || (here !== this.label && this.inside(here, p))) this.label = here;
+    const rooms = this.grid.rooms(), total = Object.values(rooms).reduce((a, b) => a + b, 0) || 1;
+    this.last = { x: p.x, y: p.y, spreadIn: est.spreadIn, room: this.label, share: (rooms[this.label] ?? 0) / total, velocity: this.vel };
+    return this.last;
+  }
+
+  // The last dot, standing still: for a moment when readings drop out, so the dot holds its place instead of
+  // handing over to another estimate and sliding across the plan.
+  hold(): FastEstimate | undefined {
+    return this.last && { ...this.last, velocity: { x: 0, y: 0 } };
+  }
+
+  private inside(roomId: string, p: Vec2) {
+    const room = this.home.rooms.find((r) => r.id === roomId);
+    // A narrow hallway is only a couple of feet from wall to wall, so its buffer shrinks with it
+    return !room || edgeDistance(p, room.polygon) >= Math.min(LABEL_IN, 0.4 * (this.depth[roomId] ?? 0));
   }
 
   get wallDb() { return this.grid.wallDb; }

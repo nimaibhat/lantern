@@ -162,3 +162,19 @@ test("the drawn dot walks around through the doors, never through a wall", () =>
   for (let i = 1; i < shown.length; i++) assert.equal(crossings(shown[i - 1], shown[i], walls), 0, `step ${i} crossed a wall`);
   assert.ok(shown[shown.length - 1].y > 150, "reached the bathroom");
 });
+
+test("as loud at the bedroom as at the kitchen: the person is in the hallway between them, and it says so", () => {
+  // Only two listeners, in the bedroom and the kitchen; the hallway between them has none
+  const two = { ...home, anchors: home.anchors.filter((a) => a.receiverId === "bedroom" || a.receiverId === "kitchen") };
+  const ids = ["bedroom", "kitchen"], live = { bedroom: true, kitchen: true };
+  const fast = new FastPositioner(two);
+  const p = { x: 180, y: 72 }; // in the hallway, between the two doors
+  const levels = heard(p).filter((_, i) => order[i] === "bedroom" || order[i] === "kitchen");
+  let e;
+  for (let t = 0; t < 6000; t += 100) {
+    levels.forEach((rssi, i) => fast.push({ receiverId: ids[i], rssi, ts: t }));
+    e = fast.tick(t + 50, live);
+  }
+  assert.equal(e!.room, "hallway");
+  assert.ok(e!.x > 144 && e!.x < 216, `the dot sits in the hallway, at x ${Math.round(e!.x)}`);
+});

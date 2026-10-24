@@ -21,10 +21,12 @@ export interface FloorFilterOptions {
   roomWeight?: number; // how much the room classifier's belief counts against the signal model (0 ignores it)
   stillIn?: number; // spread of the step kernel: most seconds a person barely moves, so belief can sharpen
   biasDb?: number; // how far a phone's overall level may sit from the model; Infinity compares listeners only
+  doorStick?: number; // weight of a step into another room against a step within one: people stay in rooms, so a
+  // room change needs a little more evidence than a step across the same room. 1 treats them alike
   modeIn?: number; // read the spot from cells this close to the most likely one (Infinity: the whole room), so two candidate areas are not averaged into a wall
 }
 
-export const FLOOR_DEFAULTS: Required<FloorFilterOptions> = { cellIn: 12, txPower: -59, n: 2.5, wallDb: 6, sigmaDb: 5, floorDb: -95, walkIn: 48, roomWeight: 0.5, stillIn: 24, biasDb: Infinity, modeIn: Infinity };
+export const FLOOR_DEFAULTS: Required<FloorFilterOptions> = { cellIn: 12, txPower: -59, n: 2.5, wallDb: 6, sigmaDb: 5, floorDb: -95, walkIn: 48, roomWeight: 0.5, stillIn: 24, biasDb: Infinity, modeIn: Infinity, doorStick: 1 };
 
 export interface Cell { x: number; y: number; room: string }
 export interface FloorEstimate { x: number; y: number; spreadIn: number; room: string; share: number } // share: probability inside `room`
@@ -102,7 +104,8 @@ export class FloorFilter {
           }
         frontier = next;
       }
-      const to = Int32Array.from(dist.keys()), w = Float64Array.from([...dist.values()].map((d) => Math.exp(-(d * d) / s2)));
+      const to = Int32Array.from(dist.keys());
+      const w = Float64Array.from([...dist.entries()].map(([j, d]) => Math.exp(-(d * d) / s2) * (this.cells[j].room === this.cells[i].room ? 1 : this.o.doorStick)));
       const z = w.reduce((s, v) => s + v, 0);
       return { to, w: w.map((v) => v / z) };
     });
@@ -186,6 +189,44 @@ export class FloorFilter {
     let v = 0;
     this.cells.forEach((c, i) => (v += this.p[i] * ((c.x - mx) ** 2 + (c.y - my) ** 2)));
     return { x: mx, y: my, spreadIn: Math.sqrt(v / (total || 1)), room: target, share: total ? byRoom[target] / total : 0 };
+  }
+
+  // Where the person is, wherever that is: the single most likely cell in the whole home, averaged with the cells a
+  // person could walk to from it within modeIn. So "as loud at the bedroom as at the living room" can come out in
+  // the hallway between them, and two rooms on either side of a wall never average into the wall. The room is the
+  // room that spot is in.
+  locate(): FloorEstimate | undefined {
+    let top = -1;
+    for (let i = 0; i < this.p.length; i++) if (top < 0 || this.p[i] > this.p[top]) top = i;
+    if (top < 0) return;
+    const dist = new Map<number, number>([[top, 0]]);
+    for (const queue = [top]; queue.length; ) {
+      const a = queue.shift()!;
+      for (const b of this.near[a]) {
+        const d = dist.get(a)! + Math.hypot(this.cells[a].x - this.cells[b].x, this.cells[a].y - this.cells[b].y);
+        if (d <= this.o.modeIn && (!dist.has(b) || d < dist.get(b)!)) {
+          if (!dist.has(b)) queue.push(b);
+          dist.set(b, d);
+        }
+      }
+    }
+    let w = 0, sx = 0, sy = 0;
+    for (const i of dist.keys()) { w += this.p[i]; sx += this.p[i] * this.cells[i].x; sy += this.p[i] * this.cells[i].y; }
+    if (!w) return;
+    const mx = sx / w, my = sy / w;
+    let at = top, best = Infinity, total = 0, v = 0;
+    for (const i of dist.keys()) {
+      const d = (this.cells[i].x - mx) ** 2 + (this.cells[i].y - my) ** 2;
+      if (d < best) { best = d; at = i; }
+    }
+    const room = this.cells[at].room;
+    let inRoom = 0;
+    this.cells.forEach((c, i) => {
+      total += this.p[i];
+      v += this.p[i] * ((c.x - mx) ** 2 + (c.y - my) ** 2);
+      if (c.room === room) inRoom += this.p[i];
+    });
+    return { x: mx, y: my, spreadIn: Math.sqrt(v / (total || 1)), room, share: total ? inRoom / total : 0 };
   }
 
   // Each room's share of the belief: a room classifier of its own, for homes without a trained model.

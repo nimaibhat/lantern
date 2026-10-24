@@ -51,3 +51,12 @@ test("mock walk: smooth, inside rooms, predicts and redirects, ends back in bed"
   assert.equal(positions[positions.length - 1].roomId, "bedroom");
   assert.ok(frames.every((f, i) => i === 0 || f.at >= frames[i - 1].at), "frames are in time order");
 });
+
+test("the room shown is the live dot's room; a late room change cannot overwrite it", () => {
+  let s = initialLive(home);
+  s = applyFrame(s, { t: "position", ts: 10_000, x: 180, y: 72, roomId: "hallway", confidence: 0.6, source: "ble" });
+  s = applyFrame(s, { t: "location", ts: 10_200, roomId: "bedroom", prevRoomId: "kitchen", source: "ble" });
+  assert.equal(s.room, "hallway", "positions are flowing, so the dot's room stays");
+  s = applyFrame(s, { t: "location", ts: 20_000, roomId: "bedroom", prevRoomId: "hallway", source: "ble" });
+  assert.equal(s.room, "bedroom", "no position for a while, so the room change moves the label");
+});

@@ -194,14 +194,15 @@ export class InferenceEngine {
 
   // Call about every 200 ms. Returns nothing until a room is known, or when frames stop.
   tick(ts: number): PositionEstimate | undefined {
-    // Live readings: the fast dot, not held to the believed room (the floor grid keeps it out of walls)
+    // Live readings: the fast dot, not held to the believed room (the floor grid keeps it out of walls), and the room
+    // it is standing in. Room changes for alerts still come from the steadier tracker in onFrame.
     if (this.fast && this.fast.lastReadingTs && ts - this.fast.lastReadingTs <= STALE_MS) {
-      const e = this.fast.tick(ts, this.online, this.last.belief);
+      const e = this.fast.tick(ts, this.online, this.last.belief) ?? this.fast.hold();
       // The fast path learns this home's walls; the frame grid uses what it learned
       if (this.floor && this.floor.wallDb !== this.fast.wallDb) this.floor.setWallDb(this.fast.wallDb);
-      // No listener with a known position hears the tag: fall through to the frame path below
+      // Never had a fix (no listener with a known position hears the tag): fall through to the frame path below
       if (e) return {
-        ts, x: round(e.x, 1), y: round(e.y, 1), roomId: this.rooms.room ?? e.room, confidence: round(this.rooms.confidence, 3),
+        ts, x: round(e.x, 1), y: round(e.y, 1), roomId: e.room, confidence: round(e.share, 3),
         source: this.opts.source ?? "ble", velocity: { x: round(e.velocity.x, 1), y: round(e.velocity.y, 1) }, spreadIn: Math.round(e.spreadIn),
       };
     }

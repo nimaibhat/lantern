@@ -39,6 +39,7 @@ export interface LiveState {
 
 export const TRAIL_MS = 10_000;
 const PREDICTION_TTL_MS = 30_000;
+const POSITION_FRESH_MS = 2000; // positions newer than this own the room shown
 
 export const initialLive = (home: HomeModel): LiveState => ({ home, risks: {}, listeners: {}, rssi: {}, trail: [] });
 
@@ -53,7 +54,8 @@ export function applyFrame(s: LiveState, f: LiveFrame): LiveState {
       return { ...s, position, trail, room: f.roomId, lastSource: f.source, prediction };
     }
     case "location":
-      return { ...s, room: f.roomId, lastSource: f.source };
+      // The live dot's own room wins while positions are flowing, so the label always matches the pinpoint
+      return { ...s, room: s.position && f.ts - s.position.ts < POSITION_FRESH_MS ? s.room : f.roomId, lastSource: f.source };
     case "prediction":
       return { ...s, prediction: { fromRoomId: f.fromRoomId, nextRoomId: f.nextRoomId, probability: f.probability, ts: f.ts } };
     case "risk": {
