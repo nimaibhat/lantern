@@ -253,9 +253,27 @@ export interface HomeSceneProps {
   ghost?: Vec2; // where the user is dragging the person
   mobility?: MobilityLeg[];
   heat?: { cells: HeatCell[]; cellIn: number };
+  showcase?: boolean; // slow auto-rotate, zoom off (the Homes page hero)
+  intro?: boolean; // walls and furniture rise in on first draw
 }
 
-export function HomeScene({ state, camera, walls = "low", dragMode, onDrag, onDrop, ghost, mobility, heat }: HomeSceneProps) {
+// The walls and furniture grow up out of the floor plan once, when the scene first draws (the Homes page hero).
+function Rise({ children, delayMs = 0, ms = 1400 }: { children: React.ReactNode; delayMs?: number; ms?: number }) {
+  const group = useRef<THREE.Group>(null!);
+  const start = useRef<number | null>(null);
+  useFrame(({ clock }) => {
+    start.current ??= clock.elapsedTime;
+    const k = Math.min(1, Math.max(0, ((clock.elapsedTime - start.current) * 1000 - delayMs) / ms));
+    group.current.scale.y = Math.max(0.001, 1 - Math.pow(1 - k, 3));
+  });
+  return (
+    <group ref={group} scale={[1, 0.001, 1]}>
+      {children}
+    </group>
+  );
+}
+
+export function HomeScene({ state, camera, walls = "low", dragMode, onDrag, onDrop, ghost, mobility, heat, showcase, intro }: HomeSceneProps) {
   const { home, position, room, prediction, trail } = state;
   const risks = riskByRoom(state);
   const roomName = (id: string) => home.rooms.find((r) => r.id === id)?.name ?? id;
@@ -268,14 +286,26 @@ export function HomeScene({ state, camera, walls = "low", dragMode, onDrag, onDr
       <color attach="background" args={["#1a1714"]} />
       <hemisphereLight args={["#fff4e5", "#3b342d", 0.9]} />
       <directionalLight position={[6, 12, 4]} intensity={0.8} castShadow />
-      <OrbitControls makeDefault enabled={!dragMode} maxPolarAngle={Math.PI / 2.1} />
+      {/* Showcase: a slow turn, and no zoom so the page under the hero still scrolls. */}
+      <OrbitControls makeDefault enabled={!dragMode} maxPolarAngle={Math.PI / 2.1} autoRotate={showcase} autoRotateSpeed={0.35} enableZoom={!showcase} />
       <CameraRig preset={camera} home={home} follow={target} />
 
       {home.rooms.map((r) => (
         <Floor key={r.id} room={r} here={r.id === room} risk={risks[r.id]} outlined={r.id === next?.id} />
       ))}
-      {walls !== "off" && <Walls home={home} opacity={walls === "full" ? 0.3 : 0.55} heightIn={walls === "low" ? 30 : undefined} />}
-      <Furniture home={home} />
+      {intro ? (
+        <>
+          <Rise>{walls !== "off" && <Walls home={home} opacity={walls === "full" ? 0.3 : 0.55} heightIn={walls === "low" ? 30 : undefined} />}</Rise>
+          <Rise delayMs={500}>
+            <Furniture home={home} />
+          </Rise>
+        </>
+      ) : (
+        <>
+          {walls !== "off" && <Walls home={home} opacity={walls === "full" ? 0.3 : 0.55} heightIn={walls === "low" ? 30 : undefined} />}
+          <Furniture home={home} />
+        </>
+      )}
       {heat && <Heat cells={heat.cells} cellIn={heat.cellIn} />}
 
       {home.rooms.map((r) => (

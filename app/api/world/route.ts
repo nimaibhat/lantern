@@ -1,11 +1,10 @@
-import { HOUSEHOLD_ID } from "@/lib/supabase/server";
+import { currentHouseholdId, isReadOnly, READ_ONLY_MESSAGE } from "@/lib/households";
 import type { HomeModel } from "@/lib/types";
 import { pointInPolygon } from "@/lib/world/geometry";
 import { getHomeModel, saveHomeModel } from "@/lib/world/store";
 
-// GET  /api/world          -> { model, saved }   newest home model (or the demo fixture)
+// GET  /api/world          -> { model, saved }   newest home model of the home being viewed
 // POST /api/world {model}  -> { version }        save the zone editor's model as the next version
-// No login yet, so this only ever touches the demo household.
 
 export async function GET() {
   return Response.json(await getHomeModel());
@@ -16,8 +15,10 @@ export async function POST(request: Request) {
   const model = body?.model as HomeModel | undefined;
   const problem = check(model);
   if (problem) return Response.json({ error: problem }, { status: 400 });
+  const householdId = await currentHouseholdId();
+  if (isReadOnly(householdId)) return Response.json({ error: READ_ONLY_MESSAGE }, { status: 403 });
   try {
-    const saved = await saveHomeModel({ ...model!, householdId: HOUSEHOLD_ID }, { note: String(body.note ?? "zone editor").slice(0, 80) });
+    const saved = await saveHomeModel({ ...model!, householdId }, { note: String(body.note ?? "zone editor").slice(0, 80) });
     return Response.json({ version: saved.version });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
