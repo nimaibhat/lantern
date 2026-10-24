@@ -6,7 +6,8 @@ import { cleanNote, closingLine, cueScript, greetingLine } from "@/lib/cues/scri
 import { HttpError, type MonitorModule } from "../module";
 import { createOutcomeLog, nightSummary, summarize } from "./analytics";
 import { createDwell } from "./dwell";
-import { createNotifier } from "./notify";
+import { contactAddress, createNotifier } from "./notify";
+import { listenForAcks } from "./ntfy-acks";
 import { ESCALATION, createResponder, type EscalationProfile, type Redirect } from "./responder";
 import { createRiskEngine, isQuiet, localMinutes, resolves, ruleFor } from "./risk";
 import { RokuClient } from "./roku";
@@ -58,6 +59,9 @@ const actions: MonitorModule = {
     const voice = createVoiceCaller(process.env, ctx.log);
     const roku = new RokuClient(process.env.ROKU_HOST || undefined, ctx.log);
     const night = () => isQuiet(Date.now(), HOUSEHOLD);
+    // Each contact's phone for Twilio, or their ntfy topic when Twilio is not live (notify.ts).
+    const primary = contactAddress(process.env.CAREGIVER_PHONE_NUMBER ?? "", process.env.NTFY_CAREGIVER_TOPIC, notify.live);
+    const backup = contactAddress(process.env.BACKUP_PHONE_NUMBER ?? "", process.env.NTFY_BACKUP_TOPIC, notify.live);
 
     // Deferred so a risk the engine raises reaches every listener before the responder's follow-up does.
     const later = <T>(fn: (x: T) => void) => (x: T) => queueMicrotask(() => fn(x));
@@ -79,8 +83,8 @@ const actions: MonitorModule = {
       timeZone: HOUSEHOLD.timezone,
       profile,
       contacts: [
-        { name: "Primary", phone: process.env.CAREGIVER_PHONE_NUMBER ?? "", priority: 1 },
-        { name: "Backup", phone: process.env.BACKUP_PHONE_NUMBER ?? "", priority: 2 },
+        { name: "Primary", phone: primary, priority: 1 },
+        { name: "Backup", phone: backup, priority: 2 },
       ],
       baseUrl: process.env.PUBLIC_BASE_URL || "http://localhost:3000",
       roomName: (id) => room(id)?.name ?? id,
@@ -105,12 +109,12 @@ const actions: MonitorModule = {
       emitRisk: later((risk: RiskEvent) => ctx.bus.emit("risk", risk)),
       emitPatient: later((state) => ctx.bus.emit("patient", state)),
       notify,
-      voice,
+      voice: primary.startsWith("ntfy:") ? undefined : voice, // the Vapi family call needs a real phone number
       log: ctx.log,
     });
     ctx.log(
       "actions",
-      `escalation profile ${profileName} (grace ${profile.graceS} s); twilio ${notify.live ? "live" : "dry run"}; vapi ${voice.live ? "live" : "off"}; roku ${roku.configured ? "on" : "dry run"}`,
+      `escalation profile ${profileName} (grace ${profile.graceS} s); twilio ${notify.live ? "live" : "dry run"}; ntfy ${notify.ntfy ? (notify.acks ? "on, acks through ntfy" : "on, acks by link") : "off"}; vapi ${voice.live ? "live" : "off"}; roku ${roku.configured ? "on" : "dry run"}`,
     );
 
     // A replay (/replay/start) re-emits a recorded night for the screens only: no new risks, texts or calls.
@@ -175,7 +179,7 @@ const actions: MonitorModule = {
         const quietNow = night();
         if (wasQuiet && !quietNow && !ctx.store.replaying) {
           ctx.log("actions", "morning summary to primary");
-          notify.sms(process.env.CAREGIVER_PHONE_NUMBER ?? "", `Lantern, last night: ${lastNight()}`).catch((e) => ctx.log("actions", "morning summary failed:", (e as Error).message));
+          notify.sms(primary, `Lantern, last night: ${lastNight()}`).catch((e) => ctx.log("actions", "morning summary failed:", (e as Error).message));
         }
         wasQuiet = quietNow;
       }, 60_000).unref();
@@ -249,6 +253,18 @@ const actions: MonitorModule = {
       ctx.bus.emit("patient", state);
       return state;
     });
+
+    // Acknowledge taps on push alerts come back through ntfy, so the caregiver's phone never has to reach this
+    // laptop (no tunnel). Stopped when the monitor closes.
+    if (notify.acks) {
+      return listenForAcks({
+        ...notify.acks,
+        onAck: (alertId) => {
+          if (responder.ack(alertId)) ctx.log("actions", "acknowledged from a push alert");
+        },
+        log: ctx.log,
+      });
+    }
   },
 };
 

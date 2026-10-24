@@ -114,8 +114,10 @@ export async function startMonitor(cfg: Config) {
     return { emitted: bus.emit(event as BusEvent, payload as never) };
   });
 
+  const stops: (() => void)[] = [];
   for (const m of modules) {
-    await m.register(ctx);
+    const stop = await m.register(ctx);
+    if (typeof stop === "function") stops.push(stop);
     log("monitor", `registered ${m.name}`);
   }
 
@@ -272,6 +274,7 @@ export async function startMonitor(cfg: Config) {
       new Promise<void>((resolve) => {
         const ig = (ctx as unknown as Record<string, unknown>)._ingest as { stop?(): void } | undefined;
         ig?.stop?.();
+        for (const stop of stops) stop();
         clearTimeout(positionTimer);
         for (const ws of live.clients) ws.terminate();
         for (const ws of listenerWss.clients) ws.terminate();

@@ -30,7 +30,10 @@ export interface ModuleCtx {
   world(): HomeModel; // current home model, provided by the world module
 }
 
+// register may return a stop function for anything it keeps open (a socket, a stream); the monitor calls it on close.
+export type Stop = () => void;
+
 export interface MonitorModule {
   name: string;
-  register(ctx: ModuleCtx): void | Promise<void>;
+  register(ctx: ModuleCtx): void | Stop | Promise<void | Stop>;
 }

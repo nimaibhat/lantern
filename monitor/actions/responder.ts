@@ -7,7 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Alert, Contact, PatientMode, PatientState, RiskEvent, RiskKind } from "@/lib/types";
-import { alertText, allClearText, backupText, callScript, handoffText, movedOnText, type FamilyFacts } from "@/lib/cues/family";
+import { ackedText, alertText, allClearText, backupText, callScript, handoffText, movedOnText, type FamilyFacts } from "@/lib/cues/family";
 import type { CallOutcome } from "@/lib/cues/vapi";
 
 // Seconds. Cues start voiceAfterS after the glow and repeat every repeatEveryS, at most maxCues times.
@@ -33,7 +33,8 @@ export function escalateAfterS(kind: RiskKind, p: EscalationProfile) {
 
 export interface Notifier {
   sms(to: string, body: string): Promise<void>;
-  call(to: string, say: string): Promise<void>;
+  call(to: string, say: string, ackUrl?: string): Promise<void>; // ackUrl: for push alerts; a phone call ignores it
+  confirm?(to: string, body: string): Promise<void>; // "got it" after an acknowledgement; only push alerts need it
 }
 
 // A two-way call to the family (Vapi). place returns the call id, or undefined if it could not start.
@@ -230,7 +231,7 @@ export function createResponder(deps: ResponderDeps) {
     if (!c) return;
     const alert = record(run, channel, who, c.phone);
     const body = text(alert.id);
-    const done = channel === "sms" ? deps.notify.sms(c.phone, body) : deps.notify.call(c.phone, body);
+    const done = channel === "sms" ? deps.notify.sms(c.phone, body) : deps.notify.call(c.phone, body, ackUrl(alert.id));
     done.catch((e) => fail(alert, who, channel, (e as Error).message));
   }
 
@@ -260,7 +261,12 @@ export function createResponder(deps: ResponderDeps) {
       const settled = deps.settled?.(to) ?? true;
       update(run, settled ? allClearText(deps.patientName, deps.roomName(to), at) : movedOnText(deps.patientName, deps.roomName(run.risk.roomId), deps.roomName(to), at));
     }
-    if (ackedBy) update(run, handoffText(deps.patientName, contact(ackedBy)?.name || "Someone"), ackedBy);
+    if (ackedBy) {
+      const by = contact(ackedBy);
+      deps.notify.confirm?.(by?.phone ?? "", ackedText(deps.patientName, deps.roomName(run.here.roomId)))
+        ?.catch((e) => deps.log("resp", "confirm to", ackedBy, "failed:", (e as Error).message));
+      update(run, handoffText(deps.patientName, by?.name || "Someone"), ackedBy);
+    }
 
     // Leave the screen alone if another response has taken it over.
     if (patient.riskEventId !== run.risk.id) return;
