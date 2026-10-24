@@ -51,3 +51,6 @@ export const movedOnText = (name: string, from: string, room: string, at: string
 
 // Sent to the other contacts when one of them says they are on it.
 export const handoffText = (name: string, who: string) => `Lantern update: ${who} is checking on ${name} now. No need to go.`;
+
+// Back to the person who tapped Acknowledge, so they know it worked (push alerts only; a text link shows a page).
+export const ackedText = (name: string, room: string) => `Lantern: got it, thank you. Alerts stopped. ${name} is in the ${lower(room)}.`;

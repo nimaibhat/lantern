@@ -49,6 +49,9 @@ function setup(opts: { voice?: VoiceCaller } = {}) {
       async call(to) {
         sent.push(`call ${to}`);
       },
+      async confirm(to, body) {
+        sent.push(`confirm ${to} ${body}`);
+      },
     },
     voice: opts.voice,
     log: () => {},
@@ -203,9 +206,11 @@ test("an acknowledgement stops everything, tells the others, and a second one is
   s.advance(10 * 60 * S);
   assert.equal(s.states().at(-1), "resolved");
   assert.equal(s.sent.at(-1), "sms +15550002 Lantern update: Maria is checking on Rosa now. No need to go.");
-  assert.equal(s.sent.filter((x) => x.startsWith("sms +15550001")).length, 1, "the person who acknowledged gets nothing more");
+  assert.equal(s.sent.filter((x) => x.startsWith("sms +15550001")).length, 1, "the person who acknowledged gets no more texts");
+  assert.deepEqual(s.sent.filter((x) => x.startsWith("confirm")), ["confirm +15550001 Lantern: got it, thank you. Alerts stopped. Rosa is in the kitchen."]);
   assert.equal(s.responder.ack("a1"), true);
   assert.equal(s.responder.ack("nope"), false);
+  assert.equal(s.sent.filter((x) => x.startsWith("confirm")).length, 1, "a second tap does not confirm again");
 });
 
 test("going back after the family was texted sends an all clear and stops the call", () => {
