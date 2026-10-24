@@ -27,6 +27,18 @@ type Ble = {
   addEventListener?: (type: "advertisementreceived", listener: (event: AdEvent) => void) => void;
 };
 
+type LaptopKind = "windows" | "mac" | "ios" | "other";
+
+function laptopKind(): LaptopKind {
+  const ua = navigator.userAgent;
+  const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || "";
+  // iPadOS calls itself a Mac. A touchscreen Mac is an iPad, and it cannot scan.
+  if (/iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
+  if (/^Win/i.test(platform) || /Windows/i.test(ua)) return "windows";
+  if (/^Mac/i.test(platform) || /Mac/i.test(ua)) return "mac";
+  return "other";
+}
+
 function bluetooth(): Ble | null {
   const nav = navigator as Navigator & { bluetooth?: Ble };
   return nav.bluetooth ?? null;
@@ -377,12 +389,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     if (existingId) deviceIdRef.current = existingId;
     try {
       const bt = bluetooth();
-      const windows = /Win/i.test(navigator.userAgent);
+      const kind = laptopKind();
       // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start mac ${/Mac/i.test(navigator.userAgent)} win ${windows} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start kind ${kind} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
-      // Windows Chrome does not deliver the phone's signal. The Mac listens in the page. This computer's hidden listener is separate.
-      const watched = windows ? "unavailable" : await listenInPage();
+      if (kind === "ios") {
+        setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
+        return;
+      }
+      // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
+      const watched = kind === "mac" ? await listenInPage() : "unavailable";
       // #region agent log
       fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
@@ -395,8 +411,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         if (saved) setNote("Looking for the phone on this laptop. Leave this page open.");
         return;
       }
+      if (kind === "mac") {
+        setNote("Chrome on this Mac could not hear the phone. Press Pair again and choose LanternTag.");
+        return;
+      }
       const here = await onHub();
       setHub(here);
+      if (kind !== "windows") {
+        setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
+        return;
+      }
       if (here && existingId && previous && existingId !== previous) {
         deviceIdRef.current = previous;
         setNote(`Open Tracking on the ${trimmed} laptop and press Pair. This computer keeps listening as its own room.`);
@@ -413,7 +437,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         await saveLaptop(trimmed, true, true, true);
         return;
       }
-      if (windows) {
+      {
         const file = new Blob([earHidden(id, `${location.origin}/api/tracking`, trimmed)], { type: "text/vbscript" });
         const url = URL.createObjectURL(file);
         const link = document.createElement("a");
@@ -425,14 +449,6 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch windows-hidden ${id}`, protocol: location.protocol }) }).catch(() => {});
         // #endregion
         setNote("Open the Lantern file that downloaded. It stays hidden, and this laptop listens for the phone.");
-        return;
-      }
-      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        setNote("This iPhone is the beacon. Open Tracking in Chrome on the Mac and press Pair.");
-      } else if (/Mac/i.test(navigator.userAgent)) {
-        setNote("Open this page in Chrome on the Mac, then press Pair.");
-      } else {
-        setNote("Open Tracking on that laptop and press Pair.");
       }
     } catch {
       setNote("Could not start listening. Try again.");
