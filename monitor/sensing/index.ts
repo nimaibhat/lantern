@@ -1,6 +1,7 @@
 // Sensing module (owner: Saran). Listener ingest, RSSI window, sim routes, nearest-room.
 
 import type { MonitorModule } from "../module";
+import { HttpError } from "../module";
 import { registerCalibration } from "./calibrate";
 import { createIngest } from "./ingest";
 import { registerNearest } from "./nearest";
@@ -19,6 +20,17 @@ const sensing: MonitorModule = {
     ctx.http.get("/debug/vector", () => {
       const f = ingest.window.frame(Date.now(), { ...ctx.store.listeners });
       return f;
+    });
+
+    // HTTP endpoint for browser-based Web Bluetooth listeners (avoids WS mixed-content issues).
+    // The Next.js API route /api/listener/report proxies here.
+    ctx.http.post("/listener/report", ({ body, query }) => {
+      const token = query.get("token") ?? "";
+      if (token !== ctx.cfg.listenerToken) throw new HttpError(401, "bad token");
+      if (!body || typeof body !== "object") throw new HttpError(400, "body required");
+      const ok = ingest.handleHttp(body);
+      if (!ok) throw new HttpError(400, "invalid message or receiver id");
+      return { ok: true };
     });
 
     // Expose ingest for the server to wire up /ws/listener

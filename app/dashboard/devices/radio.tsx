@@ -8,8 +8,8 @@ function deviceSlug(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 41);
 }
 
-// This page is the hub. Listen starts a scanner on the computer that is showing the page,
-// never on the hub machine when someone else has the page open.
+// Listen starts a scanner on the computer that is showing the page via the local agent (127.0.0.1:8791).
+// Works from both the hub and remote laptops: the browser always talks to its own machine's agent.
 export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) {
   const [id, setId] = useState(defaultId);
   const [tag, setTag] = useState(false);
@@ -17,30 +17,18 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
   const [note, setNote] = useState("");
   const slug = deviceSlug(id);
 
+  const onHubMachine = () => location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+  // Derive the hub's monitor address: when opened from a remote laptop via the hub's IP,
+  // location.hostname is the hub's IP, which is exactly what we need for the WS URL.
+  // When opened locally, it's localhost, which also works.
+  const hubHost = () => {
+    // If opened via the hub's IP, use that. Otherwise fall back to localhost.
+    return location.hostname;
+  };
+
   useEffect(() => {
-    const local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-    if (!local) return;
-    fetch("/api/radio")
-      .then((r) => r.json())
-      .then((d) => {
-        setTag(!!d.tag);
-        if (d.listenerId) {
-          setListenerId(d.listenerId);
-          setId(d.listenerId);
-        }
-      })
-      .catch(() => {});
-    const monitor = process.env.NEXT_PUBLIC_MONITOR_URL || "http://localhost:8787";
-    fetch(`${monitor}/health`)
-      .then((r) => r.json())
-      .then((d) => {
-        const online = Object.entries(d.listeners ?? {}).find(([, up]) => up)?.[0];
-        if (typeof online === "string") {
-          setListenerId(online);
-          setId(online);
-        }
-      })
-      .catch(() => {});
+    // Always check the local agent (runs on whichever machine the browser is on).
     fetch(`${AGENT}/status`)
       .then((r) => r.json())
       .then((d) => {
@@ -50,9 +38,34 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
         }
       })
       .catch(() => {});
-  }, []);
 
-  const onHubMachine = () => location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    // Check the hub's radio API (only works when opened on the hub itself).
+    if (onHubMachine()) {
+      fetch("/api/radio")
+        .then((r) => r.json())
+        .then((d) => {
+          setTag(!!d.tag);
+          if (d.listenerId) {
+            setListenerId(d.listenerId);
+            setId(d.listenerId);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Check the monitor for any already-online listener (uses the hub hostname from the URL).
+    const monitor = process.env.NEXT_PUBLIC_MONITOR_URL || `http://${hubHost()}:8787`;
+    fetch(`${monitor}/health`)
+      .then((r) => r.json())
+      .then((d) => {
+        const online = Object.entries(d.listeners ?? {}).find(([, up]) => up)?.[0];
+        if (typeof online === "string" && !listenerId) {
+          setListenerId(online);
+          setId(online);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function agent(path: string, body: unknown) {
     const res = await fetch(`${AGENT}${path}`, {
@@ -71,10 +84,13 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
       setNote("Use a short name, like bedroom or living-room.");
       return;
     }
-    const hub = `ws://${location.hostname}:8787/ws/listener`;
+    // Point the listener at the hub's monitor. When a remote laptop opens
+    // http://HUB_IP:3000/dashboard, location.hostname is the hub's IP.
+    const hub = `ws://${hubHost()}:8787/ws/listener`;
 
     if (action === "listen") {
       try {
+        // Try the local agent first (works on any laptop running agent.py).
         const data = await agent("/listen", { id: deviceId, url: hub });
         setTag(false);
         setListenerId(data.id);
@@ -82,7 +98,11 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
         return;
       } catch {
         if (!onHubMachine()) {
-          setNote("Open Tracking and name this laptop.");
+          setNote(
+            "Could not reach the local agent. On this laptop, run:\n" +
+            "  python listener/pair.py\n" +
+            "or: python listener/agent.py"
+          );
           return;
         }
       }
@@ -117,7 +137,7 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
     <section className="card" style={{ marginBottom: "1.5rem" }}>
       <h2>This laptop</h2>
       <p className="muted">
-        Room laptops use Tracking. Type a name for this laptop there. Keep LightBlue in the foreground, named LanternTag.
+        Give this laptop a room name and press Listen. Keep LightBlue in the foreground on the phone, named LanternTag.
       </p>
       <div className="place-row" style={{ marginTop: 12 }}>
         <input value={id} onChange={(e) => setId(e.target.value)} aria-label="Listener name" placeholder="living-room" />
@@ -133,7 +153,7 @@ export function RadioControl({ defaultId = "bedroom" }: { defaultId?: string }) 
       </div>
       {tag && <p className="muted">This laptop is the tag, so it cannot hear the phone. Press Stop, then Listen.</p>}
       {listenerId && <p className="muted">Listening as {listenerId}. Keep LightBlue in the foreground, named LanternTag.</p>}
-      {note && <p className="error">{note}</p>}
+      {note && <p className="error" style={{ whiteSpace: "pre-wrap" }}>{note}</p>}
     </section>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { earHidden } from "@/lib/sensing/ear-bat";
 import { roughFeet } from "@/lib/sensing/feet";
 import { closestRoom, type Placement, type Reading } from "@/lib/sensing/nearest-room";
 import type { Receiver } from "@/lib/types";
@@ -76,14 +75,9 @@ function adMatches(event: AdEvent): boolean {
   return name.includes("lantern") || uuids.includes(SERVICE) || name.includes(SERVICE);
 }
 
-async function onHub(): Promise<boolean> {
-  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return true;
-  try {
-    const res = await fetch("http://127.0.0.1:3010/", { signal: AbortSignal.timeout(800) });
-    return res.ok;
-  } catch {
-    return false;
-  }
+function pageIsHub(): boolean {
+  if (typeof location === "undefined") return false;
+  return location.hostname === "localhost" || location.hostname === "127.0.0.1";
 }
 
 async function askAgent(deviceId: string): Promise<boolean> {
@@ -111,7 +105,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [connected, setConnected] = useState(true);
   const [mineId, setMineId] = useState<string | null>(null);
   const [mineName, setMineName] = useState("");
-  const [hub, setHub] = useState(true);
+  const [hub, setHub] = useState(false);
+  const [launchId, setLaunchId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
@@ -159,17 +154,16 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
     const as = new URLSearchParams(location.search).get("as");
     if (as && /^ear-[a-f0-9]{8}$/i.test(as)) setAskId(as);
-    onHub().then((here) => {
-      setHub(here);
-      // This computer hears in a hidden listener. Opening the page keeps that going.
-      if (here && saved && name) {
-        fetch("/api/tracking", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "join", name, deviceId: saved, listen: true, hub: true, replace: false }),
-        }).catch(() => {});
-      }
-    });
+    const here = pageIsHub();
+    setHub(here);
+    // This computer hears in a listener. Opening the page on the server machine keeps that going.
+    if (here && saved && name) {
+      fetch("/api/tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "join", name, deviceId: saved, listen: true, hub: true, replace: false, protocol: location.protocol }),
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -225,15 +219,18 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           setWantedIds((data.wanted as unknown[]).filter((id): id is string => typeof id === "string" && /^ear-[a-f0-9]{8}$/i.test(id)));
         }
         if (Array.isArray(data.devices)) {
+          const freshIds = new Set<string>();
           setReadings((prev) => {
             const next = { ...prev };
             for (const d of data.devices as { id: string; rssi: number; ageMs: number }[]) {
               browserIds.current.add(d.id);
               const fresh = d.ageMs < 5000 && d.rssi > -100;
+              if (fresh) freshIds.add(d.id);
               next[d.id] = { id: d.id, online: fresh, rssi: fresh ? d.rssi : -100 };
             }
             return next;
           });
+          setLaunchId((current) => (current && freshIds.has(current) ? null : current));
         }
       } catch {}
     };
@@ -300,10 +297,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   }
 
   async function saveLaptop(name: string, listen: boolean, hubMachine: boolean, replace = false) {
+    const local = pageIsHub();
     const res = await fetch("/api/tracking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen, hub: hubMachine, replace }),
+      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen: listen && local, hub: hubMachine && local, replace, protocol: location.protocol }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || typeof data.deviceId !== "string") {
@@ -323,7 +321,10 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setLabels((prev) => ({ ...prev, [data.deviceId]: label }));
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
-    if (listen && data.listening === false) setNote("This computer is already scanning as another laptop. Pair on the other computer.");
+    if (listen && local && data.listening === false) {
+      setNote("This laptop could not start listening. Turn Bluetooth on and press Pair again.");
+      return false;
+    }
     return true;
   }
 
@@ -403,46 +404,46 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       return;
     }
     setNote("");
+    setLaunchId(null);
     setBusy(true);
-    const previous = deviceIdRef.current;
     if (existingId) deviceIdRef.current = existingId;
     try {
       const bt = bluetooth();
       const kind = laptopKind();
+      const here = pageIsHub();
+      setHub(here);
       // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-start kind ${kind} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
+      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal: here, pairShown: true, error: `pair-start kind ${kind} lescan ${typeof bt?.requestLEScan === "function"} watch ${browserCanWatch()}`, protocol: location.protocol }) }).catch(() => {});
       // #endregion
       if (kind === "ios") {
         setNote("This iPhone is the beacon. Pair from Chrome on a Mac, or from the Windows laptop in that room.");
         return;
       }
       // Mac Chrome can hear the phone in this page. Windows Chrome cannot, so a Windows laptop listens beside the browser.
-      const watched = kind === "mac" ? await listenInPage() : "unavailable";
-      // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
-      // #endregion
-      if (watched === "cancelled") {
-        setNote("Pick LanternTag in the list.");
-        return;
-      }
-      if (watched === "watching") {
-        const saved = await saveLaptop(trimmed, false, false);
-        if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
-        return;
-      }
       if (kind === "mac") {
+        const watched = await listenInPage();
+        // #region agent log
+        fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal: here, pairShown: true, error: `pair-branch ${watched}`, protocol: location.protocol }) }).catch(() => {});
+        // #endregion
+        if (watched === "cancelled") {
+          setNote("Pick LanternTag in the list.");
+          return;
+        }
+        if (watched === "watching") {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
+          return;
+        }
         setNote("Chrome on this Mac could not hear the phone. Press Pair again and choose LanternTag.");
         return;
       }
-      const here = await onHub();
-      setHub(here);
       if (kind !== "windows") {
         setNote("Pair from a Mac in Chrome, or from the Windows laptop in that room.");
         return;
       }
-      if (here && existingId && previous && existingId !== previous) {
-        deviceIdRef.current = previous;
-        await askThatLaptop(existingId, trimmed);
+      if (here) {
+        const saved = await saveLaptop(trimmed, true, true, true);
+        if (saved) setNote("This laptop is listening. Leave this page open.");
         return;
       }
       const saved = await saveLaptop(trimmed, false, false);
@@ -452,48 +453,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         setNote("This laptop is listening. Leave this page open.");
         return;
       }
-      if (here) {
-        await saveLaptop(trimmed, true, true, true);
-        return;
-      }
-      {
-        const file = new Blob([earHidden(id, `${location.origin}/api/tracking`, trimmed)], { type: "text/vbscript" });
-        const url = URL.createObjectURL(file);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "Lantern.vbs";
-        link.click();
-        URL.revokeObjectURL(url);
-        // #region agent log
-        fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: false, pairShown: true, error: `pair-branch windows-hidden ${id}`, protocol: location.protocol }) }).catch(() => {});
-        // #endregion
-        setNote("Open the Lantern file that downloaded. It stays hidden, and this laptop listens for the phone.");
-      }
+      setLaunchId(id);
+      setNote("Open the Lantern file. Leave its window open until this laptop shows a dBm reading.");
     } catch {
       setNote("Could not start listening. Try again.");
     } finally {
       setBusy(false);
     }
-  }
-
-  async function askThatLaptop(id: string, label: string) {
-    await fetch("/api/tracking", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "want", deviceId: id }),
-    }).catch(() => {});
-    setWantedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    const page = shareUrl || `${location.origin}/dashboard/tracking`;
-    setNote(`This computer stays ${mineName || "its own room"}. On the ${label} laptop, open ${page} and press Start.`);
-  }
-
-  function claim(id: string, label: string) {
-    if (!/^ear-[a-f0-9]{8}$/i.test(id)) return;
-    if (hub && mineId && id !== mineId) {
-      void askThatLaptop(id, label);
-      return;
-    }
-    void pairLaptop(label, id);
   }
 
   async function connect(name: string) {
@@ -548,7 +514,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const detail = lead
     ? `About ${Math.round(roughFeet(lead.reading!.rssi))} ft from ${nameOf(lead.id)}.${others.map((o) => ` ${nameOf(o.id)} is about ${Math.round(roughFeet(o.reading!.rssi))} ft.`).join("")}`
     : "";
-  const inviteId = [askId, ...wantedIds].find((id) => id && id !== mineId && !readings[id]?.online) ?? null;
+  const inviteId = [askId, ...wantedIds].find((id) => id && !readings[id]?.online) ?? null;
   const showStart = !hub && !!inviteId;
 
   return (
@@ -566,9 +532,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           <p className="eyebrow">This laptop</p>
           <h2>{nameOf(inviteId)}</h2>
           <p>Press Start so this computer hears the phone and sends its own signal.</p>
-          <button className="btn" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(inviteId), inviteId)}>
-            Start
-          </button>
+          {launchId === inviteId ? (
+            <a className="btn" href={`/api/tracking/launch?id=${inviteId}`}>Open listener</a>
+          ) : (
+            <button className="btn" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(inviteId), inviteId)}>
+              Start
+            </button>
+          )}
         </div>
       )}
 
@@ -579,8 +549,6 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const silent = !!c.reading && !c.reading.online;
           const pct = heard ? Math.min(100, Math.max(0, ((rssi + 100) / 70) * 100)) : 0;
           const isLead = call?.receiverId === c.id;
-          const isMine = mineId === c.id;
-          const otherDevice = !isMine && mineId;
           return (
             <section key={c.id} className={isLead ? "card track-card lead" : "card track-card"}>
               <div className="track-top">
@@ -588,15 +556,17 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
                 <button className="btn ghost small" disabled={busy} onClick={() => remove(c.id)} suppressHydrationWarning>Remove</button>
               </div>
               <h2>{nameOf(c.id)}</h2>
-              <p className="track-dbm">{heard ? Math.round(rssi) : otherDevice ? "Other laptop" : silent ? "No signal" : "Waiting"}</p>
+              <p className="track-dbm">{heard ? Math.round(rssi) : silent ? "No signal" : "Waiting"}</p>
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
-              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : otherDevice ? "Open Tracking on that laptop and press Start." : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
-              {!heard && (
-                <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(c.id, nameOf(c.id))}>
-                  {hub && otherDevice ? "Ask that laptop" : "Pair"}
+              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
+              {!heard && (launchId === c.id ? (
+                <a className="btn small" href={`/api/tracking/launch?id=${c.id}`}>Open listener</a>
+              ) : (
+                <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(c.id), c.id)}>
+                  Pair
                 </button>
-              )}
+              ))}
             </section>
           );
         })}
@@ -616,11 +586,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           >
             Rename
           </button>
-          {!mineHears && mineId && (
-            <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(mineId, mineName)}>
+          {!mineHears && mineId && (launchId === mineId ? (
+            <a className="btn small" href={`/api/tracking/launch?id=${mineId}`}>Open listener</a>
+          ) : (
+            <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(mineName, mineId)}>
               Pair
             </button>
-          )}
+          ))}
         </div>
       ) : (
         <form

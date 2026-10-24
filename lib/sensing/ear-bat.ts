@@ -2,6 +2,16 @@
 // advertisement. The file this builds listens on that laptop and posts dBm to the hub.
 // A scriptblock passed to add_Received never fires. A real WinRT delegate does.
 
+// Next binds 0.0.0.0, so the request URL is not the address the other laptop opened.
+export function originFor(request: Request): string {
+  const url = new URL(request.url);
+  const raw = (request.headers.get("x-forwarded-host") || request.headers.get("host") || "").split(",")[0]?.trim() ?? "";
+  if (!raw || raw === "0.0.0.0" || raw.startsWith("0.0.0.0:")) return url.origin;
+  const forwarded = request.headers.get("x-forwarded-proto");
+  const proto = forwarded === "http" || forwarded === "https" ? forwarded : url.protocol.replace(":", "");
+  return `${proto}://${raw}`;
+}
+
 function utf16leBase64(text: string): string {
   let binary = "";
   for (let i = 0; i < text.length; i++) {
@@ -116,20 +126,23 @@ export function earBat(deviceId: string, postUrl: string, label: string): string
 
 // The scanner script is about 9000 characters. A downloaded file that long never
 // starts. This file is short: the other laptop downloads it, then pulls the script.
-export function earHidden(deviceId: string, postUrl: string, _label: string): string {
+// The window stays open so a Bluetooth or download error is visible.
+export function earLaunch(deviceId: string, postUrl: string, label: string): string {
   if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
   const post = postUrl.trim().replace(/\/$/, "");
   if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
-  const earUrl = `${post}/ear?id=${deviceId}`;
+  const title = (label.replace(/[^\w .'-]/g, "").trim() || "laptop").slice(0, 40);
+  const earUrl = `${post}/ear?id=${deviceId.toLowerCase()}`;
   const command = [
     "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}",
     "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12",
     `$u='${earUrl}'`,
     "$p=Join-Path $env:TEMP 'lantern-ear.ps1'",
     "Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $p",
+    "if (-not (Test-Path $p)) { Write-Output 'Could not download the listener.'; exit 1 }",
     "Unblock-File -Path $p",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $p",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p",
   ].join("; ");
   if (command.length > 2000) throw new Error("launcher command is too long");
-  return `Set shell = CreateObject("Wscript.Shell")\r\nshell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""${command}""", 0, False\r\n`;
+  return `@echo off\r\ntitle Lantern ${title}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${command}"\r\nif errorlevel 1 (\r\n  echo Could not download the listener.\r\n  pause\r\n)\r\n`;
 }

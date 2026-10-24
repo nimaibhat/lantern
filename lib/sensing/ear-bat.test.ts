@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { earBat, earHidden } from "./ear-bat";
+import { earBat, earLaunch, originFor } from "./ear-bat";
 
 test("ear file posts as the laptop that downloaded it", () => {
   const bat = earBat("ear-87f06ffd", "https://192.168.1.68:3000/api/tracking", "Bedroom");
@@ -16,12 +16,20 @@ test("ear file posts as the laptop that downloaded it", () => {
   assert.doesNotMatch(script, /Apple/);
 });
 
-test("hidden listener has no window and posts as that laptop", () => {
-  const file = earHidden("ear-87f06ffd", "https://192.168.1.68:3000/api/tracking", "Bedroom");
-  assert.match(file, /WindowStyle Hidden/);
-  assert.doesNotMatch(file, /echo off/);
+test("listener file is a visible bat and posts as that laptop", () => {
+  const file = earLaunch("ear-87f06ffd", "https://192.168.1.68:3000/api/tracking", "Bedroom");
+  assert.match(file, /echo off/);
+  assert.match(file, /pause/);
+  assert.doesNotMatch(file, /WindowStyle Hidden/);
+  assert.doesNotMatch(file, /Wscript/);
   assert.doesNotMatch(file, /-EncodedCommand /);
   assert.match(file, /https:\/\/192\.168\.1\.68:3000\/api\/tracking\/ear\?id=ear-87f06ffd/);
-  const run = file.split("shell.Run ")[1] ?? "";
-  assert.ok(run.length < 2000);
+  assert.ok(file.length < 2000);
+});
+
+test("origin follows the browser host instead of 0.0.0.0", () => {
+  const req = new Request("https://0.0.0.0:3000/api/tracking/launch?id=ear-87f06ffd", {
+    headers: { host: "192.168.1.68:3000" },
+  });
+  assert.equal(originFor(req), "https://192.168.1.68:3000");
 });

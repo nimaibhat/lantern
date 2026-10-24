@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BrowserListener } from "./browser-listener";
 import { Calibration } from "./calibration";
 import { RadioControl } from "./radio";
 
@@ -353,6 +354,8 @@ export default function DevicesPage() {
           </table>
         )}
       </section>
+
+      <BrowserListener />
 
       <Calibration rooms={rooms} />
 

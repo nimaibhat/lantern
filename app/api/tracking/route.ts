@@ -1,6 +1,5 @@
 import { appendFileSync } from "node:fs";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import http from "node:http";
 import os from "os";
 import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
 
@@ -54,15 +53,28 @@ function stopEar() {
   running.id = null;
 }
 
-function startEar(deviceId: string): Promise<boolean> {
+function earPostUrl(request: Request, clientProtocol?: string): string {
+  const url = new URL(request.url);
+  const startedHttps = process.argv.some((arg) => arg.includes("experimental-https")) || process.env.npm_lifecycle_event === "dev:https";
+  const https = clientProtocol === "https:" || (clientProtocol !== "http:" && (url.protocol === "https:" || startedHttps));
+  const port = url.port || process.env.PORT || "3000";
+  return `${https ? "https" : "http"}://127.0.0.1:${port}/api/tracking`;
+}
+
+function requestFromHub(request: Request): boolean {
+  const host = (request.headers.get("host") ?? "").trim().toLowerCase();
+  const name = host.startsWith("[") ? host.slice(1, host.indexOf("]")) : host.split(":")[0];
+  return name === "localhost" || name === "127.0.0.1" || name === "::1";
+}
+
+function startEar(deviceId: string, postUrl: string): Promise<boolean> {
   stopEar();
-  const port = process.env.PORT || "3000";
   return new Promise((resolve) => {
     let proc: ChildProcess;
     try {
       proc = spawn(
         "py",
-        ["-u", "listener/listener.py", "--id", deviceId, "--post", `https://127.0.0.1:${port}/api/tracking`, "--min-interval", "0.8"],
+        ["-u", "listener/listener.py", "--id", deviceId, "--post", postUrl, "--min-interval", "0.8"],
         { cwd: process.cwd(), windowsHide: true, stdio: "ignore" },
       );
     } catch {
@@ -83,30 +95,6 @@ function startEar(deviceId: string): Promise<boolean> {
     setTimeout(() => finish(proc.exitCode == null && !proc.killed), 700);
   });
 }
-
-// The page asks 127.0.0.1:3010 so only the computer running the hub starts the scanner here.
-function startProbe() {
-  const g = globalThis as typeof globalThis & { __lanternProbe?: boolean };
-  if (g.__lanternProbe) return;
-  g.__lanternProbe = true;
-  const server = http.createServer((req, res) => {
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Private-Network", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.setHeader("Vary", "Origin");
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    res.writeHead(200, { "content-type": "text/plain" });
-    res.end("ok");
-  });
-  server.on("error", () => {});
-  server.listen(3010, "127.0.0.1");
-}
-startProbe();
 
 function shareUrl(): string {
   const port = process.env.PORT || "3000";
@@ -167,7 +155,7 @@ export async function POST(request: Request) {
     // #endregion
     return Response.json({ ok: true });
   }
-  if (body.action === "join") return join(body);
+  if (body.action === "join") return join(body, request);
   if (body.action === "want") return want(body);
   if (body.action === "hear") return hear(body);
   if (body.action === "place") return place(body);
@@ -223,7 +211,7 @@ function killPid(pid: number): Promise<void> {
 }
 
 // One Windows radio can scan as one laptop. Pairing a different laptop switches the radio to that name.
-async function listenHere(receiverId: string, replace: boolean): Promise<boolean> {
+async function listenHere(receiverId: string, replace: boolean, postUrl: string): Promise<boolean> {
   const running = earProc();
   const scanners = await scannerPids();
   const ids = scanners.map((row) => row.id);
@@ -238,7 +226,7 @@ async function listenHere(receiverId: string, replace: boolean): Promise<boolean
   }
   if (running.proc?.pid && running.id !== receiverId) await killPid(running.proc.pid);
   if (already) return true;
-  const started = await startEar(receiverId);
+  const started = await startEar(receiverId, postUrl);
   // #region agent log
   agentLog("B", "route.ts:listenHere", "scanner started", { receiverId, started });
   // #endregion
@@ -257,7 +245,7 @@ async function want(body: { deviceId?: string }) {
   return Response.json({ ok: true, deviceId });
 }
 
-async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean; replace?: boolean }) {
+async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean; replace?: boolean; protocol?: string }, request: Request) {
   const label = cleanName(body.name);
   if (!label) return Response.json({ error: "Type a name." }, { status: 400 });
 
@@ -286,7 +274,8 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
     console.error("Could not save a laptop:", error.message);
     return Response.json({ error: "Could not save that device." }, { status: 500 });
   }
-  const listening = body.listen && body.hub ? await listenHere(receiverId, !!body.replace) : false;
+  const clientProtocol = body.protocol === "https:" || body.protocol === "http:" ? body.protocol : undefined;
+  const listening = body.listen && body.hub && requestFromHub(request) ? await listenHere(receiverId, !!body.replace, earPostUrl(request, clientProtocol)) : false;
   return Response.json({ ok: true, deviceId: receiverId, label, listening });
 }
 
