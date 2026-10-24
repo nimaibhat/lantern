@@ -115,7 +115,9 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
-  const [awayId, setAwayId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState("");
+  const [wantedIds, setWantedIds] = useState<string[]>([]);
+  const [askId, setAskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const held = useRef<string | null>(null);
   const savedRoom = useRef<string | null>(null);
@@ -155,6 +157,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         }
       }).catch(() => {});
     }
+    const as = new URLSearchParams(location.search).get("as");
+    if (as && /^ear-[a-f0-9]{8}$/i.test(as)) setAskId(as);
     onHub().then((here) => {
       setHub(here);
       // This computer hears in a hidden listener. Opening the page keeps that going.
@@ -215,6 +219,10 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         if (Array.isArray(data.receivers)) {
           setPlaced(ears(data.receivers));
           setLabels(Object.fromEntries(data.receivers.map((r: { id: string; label: string }) => [r.id, r.label])));
+        }
+        if (typeof data.shareUrl === "string" && data.shareUrl) setShareUrl(data.shareUrl);
+        if (Array.isArray(data.wanted)) {
+          setWantedIds((data.wanted as unknown[]).filter((id): id is string => typeof id === "string" && /^ear-[a-f0-9]{8}$/i.test(id)));
         }
         if (Array.isArray(data.devices)) {
           setReadings((prev) => {
@@ -434,8 +442,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       }
       if (here && existingId && previous && existingId !== previous) {
         deviceIdRef.current = previous;
-        setAwayId(existingId);
-        setNote(`Pair on the ${trimmed} laptop. This computer is already scanning as ${mineName || "its own room"}.`);
+        await askThatLaptop(existingId, trimmed);
         return;
       }
       const saved = await saveLaptop(trimmed, false, false);
@@ -469,8 +476,23 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
   }
 
+  async function askThatLaptop(id: string, label: string) {
+    await fetch("/api/tracking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "want", deviceId: id }),
+    }).catch(() => {});
+    setWantedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    const page = shareUrl || `${location.origin}/dashboard/tracking`;
+    setNote(`This computer stays ${mineName || "its own room"}. On the ${label} laptop, open ${page} and press Start.`);
+  }
+
   function claim(id: string, label: string) {
     if (!/^ear-[a-f0-9]{8}$/i.test(id)) return;
+    if (hub && mineId && id !== mineId) {
+      void askThatLaptop(id, label);
+      return;
+    }
     void pairLaptop(label, id);
   }
 
@@ -526,6 +548,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const detail = lead
     ? `About ${Math.round(roughFeet(lead.reading!.rssi))} ft from ${nameOf(lead.id)}.${others.map((o) => ` ${nameOf(o.id)} is about ${Math.round(roughFeet(o.reading!.rssi))} ft.`).join("")}`
     : "";
+  const inviteId = [askId, ...wantedIds].find((id) => id && id !== mineId && !readings[id]?.online) ?? null;
+  const showStart = !hub && !!inviteId;
 
   return (
     <div className="tracking">
@@ -537,14 +561,26 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         </div>
       </div>
 
+      {showStart && inviteId && (
+        <div className="card track-card lead">
+          <p className="eyebrow">This laptop</p>
+          <h2>{nameOf(inviteId)}</h2>
+          <p>Press Start so this computer hears the phone and sends its own signal.</p>
+          <button className="btn" disabled={busy} suppressHydrationWarning onClick={() => pairLaptop(nameOf(inviteId), inviteId)}>
+            Start
+          </button>
+        </div>
+      )}
+
       <div className="track-grid">
         {cards.map((c) => {
           const rssi = c.reading?.rssi ?? -100;
           const heard = !!c.reading?.online && rssi > -100;
           const silent = !!c.reading && !c.reading.online;
           const pct = heard ? Math.min(100, Math.max(0, ((rssi + 100) / 70) * 100)) : 0;
-          const away = awayId === c.id;
           const isLead = call?.receiverId === c.id;
+          const isMine = mineId === c.id;
+          const otherDevice = !isMine && mineId;
           return (
             <section key={c.id} className={isLead ? "card track-card lead" : "card track-card"}>
               <div className="track-top">
@@ -552,13 +588,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
                 <button className="btn ghost small" disabled={busy} onClick={() => remove(c.id)} suppressHydrationWarning>Remove</button>
               </div>
               <h2>{nameOf(c.id)}</h2>
-              <p className="track-dbm">{heard ? Math.round(rssi) : away ? "Not this PC" : silent ? "No signal" : "Waiting"}</p>
+              <p className="track-dbm">{heard ? Math.round(rssi) : otherDevice ? "Other laptop" : silent ? "No signal" : "Waiting"}</p>
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
-              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : away ? "Pair on that laptop. This computer is already scanning." : silent ? "Not hearing the phone" : heardCards.length > 0 ? "No reading from this laptop" : "Waiting for LanternTag"}</p>
+              <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : otherDevice ? "Open Tracking on that laptop and press Start." : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
               {!heard && (
                 <button className="btn small" disabled={busy} suppressHydrationWarning onClick={() => claim(c.id, nameOf(c.id))}>
-                  Pair
+                  {hub && otherDevice ? "Ask that laptop" : "Pair"}
                 </button>
               )}
             </section>
@@ -610,6 +646,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         </form>
       )}
       {shownNote && <p>{shownNote}</p>}
+      {shareUrl && placed.length > 0 && (
+        <p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+          Other laptops: open <strong>{shareUrl}</strong> and press Pair
+        </p>
+      )}
     </div>
   );
 }

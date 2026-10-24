@@ -24,11 +24,13 @@ type Ear = { rssi: number; at: number };
 type JoinSlot = {
   ears: Map<string, Ear>;
   seenWrite: Map<string, number>;
+  wanted: Map<string, number>;
 };
 
 function slot(): JoinSlot {
   const g = globalThis as typeof globalThis & { __lanternJoin?: JoinSlot };
-  g.__lanternJoin ??= { ears: new Map(), seenWrite: new Map() };
+  g.__lanternJoin ??= { ears: new Map(), seenWrite: new Map(), wanted: new Map() };
+  g.__lanternJoin.wanted ??= new Map();
   return g.__lanternJoin;
 }
 
@@ -128,7 +130,7 @@ export async function GET() {
       ageMs: now - ear.at,
       online: now - ear.at < HEAR_FRESH_MS,
     }));
-    return Response.json({ devices, receivers: [], shareUrl: share });
+    return Response.json({ devices, receivers: [], shareUrl: share, wanted: [...slot().wanted.keys()] });
   }
   const { data } = await db.from("receivers").select("id, label, room_id, last_rssi, last_rssi_at").eq("household_id", HOUSEHOLD_ID);
   const latest = new Map<string, { rssi: number; at: number }>();
@@ -147,7 +149,11 @@ export async function GET() {
     online: now - ear.at < HEAR_FRESH_MS && ear.rssi > -100,
   }));
   const receivers = (data ?? []).map((r) => ({ id: r.id as string, label: r.label as string, roomId: (r.room_id as string | null) ?? "" }));
-  return Response.json({ devices, receivers, shareUrl: share });
+  const wanted = [...slot().wanted.keys()].filter((id) => {
+    const ear = latest.get(id);
+    return !ear || now - ear.at >= HEAR_FRESH_MS;
+  });
+  return Response.json({ devices, receivers, shareUrl: share, wanted });
 }
 
 export async function POST(request: Request) {
@@ -162,6 +168,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
   if (body.action === "join") return join(body);
+  if (body.action === "want") return want(body);
   if (body.action === "hear") return hear(body);
   if (body.action === "place") return place(body);
   if (body.action === "remove") return remove(body);
@@ -238,6 +245,18 @@ async function listenHere(receiverId: string, replace: boolean): Promise<boolean
   return started;
 }
 
+async function want(body: { deviceId?: string }) {
+  const deviceId = (body.deviceId ?? "").trim();
+  if (!SLUG.test(deviceId)) return Response.json({ error: "Unknown device." }, { status: 400 });
+  const { data } = await db!.from("receivers").select("id").eq("id", deviceId).eq("household_id", HOUSEHOLD_ID).maybeSingle();
+  if (!data) return Response.json({ error: "Unknown device." }, { status: 404 });
+  slot().wanted.set(deviceId, Date.now());
+  // #region agent log
+  agentLog("B", "route.ts:want", "laptop wanted", { deviceId });
+  // #endregion
+  return Response.json({ ok: true, deviceId });
+}
+
 async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean; replace?: boolean }) {
   const label = cleanName(body.name);
   if (!label) return Response.json({ error: "Type a name." }, { status: 400 });
@@ -292,6 +311,7 @@ async function hear(body: { deviceId?: string; rssi?: number }) {
   const now = Date.now();
   const rounded = Math.round(rssi);
   slot().ears.set(deviceId, { rssi: rounded, at: now });
+  slot().wanted.delete(deviceId);
   // #region agent log
   const heardLog = (globalThis as typeof globalThis & { __lanternHeardLog?: Map<string, number> }).__lanternHeardLog ?? new Map<string, number>();
   (globalThis as typeof globalThis & { __lanternHeardLog?: Map<string, number> }).__lanternHeardLog = heardLog;
@@ -345,6 +365,7 @@ async function remove(body: { receiverId?: string }) {
   if (error) return Response.json({ error: "Could not remove that device." }, { status: 500 });
   slot().ears.delete(receiverId);
   slot().seenWrite.delete(receiverId);
+  slot().wanted.delete(receiverId);
   if (earProc().id === receiverId) stopEar();
   return Response.json({ ok: true });
 }
