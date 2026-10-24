@@ -64,6 +64,9 @@ export interface ZoneRule {
   id: string;
   householdId: string;
   roomKind: RoomKind;
+  kind?: RiskKind; // set for redirect rules only
+  startHour: number; // 0 to 23, household time
+  endHour: number; // wraps past midnight when below startHour; 0 to 24 means any time
   action: "redirect" | "allow" | "greet";
 }
 

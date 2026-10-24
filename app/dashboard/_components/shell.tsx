@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { NAV } from "./nav.config";
 
 // Sidebar, top bar, and the day/night switch. Night is remembered per browser.
 export function Shell({ householdName, children }: { householdName: string; children: React.ReactNode }) {
