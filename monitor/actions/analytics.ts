@@ -13,6 +13,7 @@ export interface Outcome {
   escalated: boolean; // a caregiver was messaged
   arrived: boolean; // a predicted risk counts only once they actually arrive
   leadTimeS?: number;
+  cues: number; // reminders played before it ended
 }
 
 export function createOutcomeLog(limit = 500) {
@@ -20,9 +21,10 @@ export function createOutcomeLog(limit = 500) {
   return {
     onRisk(r: RiskEvent) {
       const o = byId.get(r.id) ?? {
-        id: r.id, kind: r.kind, roomId: r.roomId, trigger: r.trigger, startedAt: r.startedAt, escalated: false, arrived: r.trigger === "detected",
+        id: r.id, kind: r.kind, roomId: r.roomId, trigger: r.trigger, startedAt: r.startedAt, escalated: false, arrived: r.trigger === "detected", cues: 0,
       };
       if (r.state === "escalated") o.escalated = true;
+      if (r.cues !== undefined) o.cues = Math.max(o.cues, r.cues);
       if (r.arrivedAt) o.arrived = true;
       if (r.leadTimeS !== undefined) o.leadTimeS = r.leadTimeS;
       if (r.state === "resolved") o.resolvedAt = r.resolvedAt ?? new Date().toISOString();
@@ -54,6 +56,33 @@ export function summarize(outcomes: Outcome[]) {
     medianReturnS: median(worked.map(seconds)),
     leadTimesS: outcomes.flatMap((o) => (o.leadTimeS === undefined ? [] : [o.leadTimeS])),
     byKind,
+    // Which reminder brought them back without waking anyone: 0 is on their own, during the grace period.
+    workedAfterCue: worked.reduce<Record<string, number>>((acc, o) => ({ ...acc, [o.cues]: (acc[o.cues] ?? 0) + 1 }), {}),
     recent: [...outcomes].reverse().slice(0, 12),
   };
+}
+
+const NIGHT_LABEL: Record<RiskKind, string> = {
+  "kitchen-night": "kitchen",
+  "night-wandering": "up and about",
+  "exit-approach": "front door",
+  "long-bathroom-stay": "long bathroom stay",
+  "no-movement": "sitting still",
+};
+
+function ending(o: Outcome): string {
+  if (!o.resolvedAt) return "still going";
+  if (o.escalated) return "family was texted";
+  if (o.cues === 0) return "settled without a reminder";
+  return o.cues === 1 ? "back after 1 reminder" : `back after ${o.cues} reminders`;
+}
+
+// Last night in one paragraph, for the analytics page and the optional morning text. inNight decides which
+// outcomes count (quiet hours); clock formats a time in the household's timezone.
+export function nightSummary(outcomes: Outcome[], name: string, inNight: (o: Outcome) => boolean, clock: (iso: string) => string): string {
+  const night = outcomes.filter((o) => o.arrived && inNight(o));
+  if (!night.length) return `Quiet night. ${name} did not need any reminders.`;
+  const times = night.length === 1 ? "once" : night.length === 2 ? "twice" : `${night.length} times`;
+  const items = night.map((o) => `${clock(o.startedAt)}, ${NIGHT_LABEL[o.kind]}: ${ending(o)}`);
+  return `${name} was up ${times} last night. ${items.join("; ")}.`;
 }

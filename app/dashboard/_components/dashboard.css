@@ -269,7 +269,18 @@ body:has(.dash.night) {
   font-size: 0.85rem;
 }
 
+.out-of-bed {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--d-accent-soft);
+  color: var(--d-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .dash input,
+.dash textarea,
 .dash select {
   padding: 9px 12px;
   border: 1px solid var(--d-border);
@@ -475,6 +486,21 @@ body:has(.dash.night) {
 .risk-row:first-child { border-top: 0; padding-top: 0; }
 .risk-row div { display: flex; flex-direction: column; gap: 2px; }
 .risk-row .muted { font-size: 0.85rem; }
+.risk-progress { font-size: 0.85rem; color: var(--d-accent); }
+
+/* Say something on the TV */
+.say-form { display: flex; flex-direction: column; gap: 10px; }
+.say-form textarea { width: 100%; resize: vertical; min-height: 64px; }
+.say-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.say-row .muted { font-size: 0.8rem; }
+.say-form [role="status"] { font-size: 0.85rem; }
+
+/* Time today: minutes per room as short bars */
+.dwell-list { display: flex; flex-direction: column; gap: 8px; }
+.dwell-list li { display: grid; grid-template-columns: minmax(0, 7rem) 1fr auto; align-items: center; gap: 10px; font-size: 0.9rem; }
+.dwell-list li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dwell-bar { height: 6px; border-radius: 3px; background: var(--d-border); overflow: hidden; }
+.dwell-bar span { display: block; height: 100%; border-radius: 3px; background: var(--d-accent); }
 
 .timeline-card { grid-column: 1 / -1; }
 

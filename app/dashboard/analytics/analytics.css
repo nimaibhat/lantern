@@ -110,6 +110,9 @@
   gap: 16px;
 }
 
+.a-night { margin-bottom: 6px; font-size: 1.05rem; line-height: 1.45; }
+.a-works { margin-bottom: 14px; font-size: 0.85rem; }
+
 .a-tonight > div { display: flex; flex-direction: column; gap: 2px; }
 .a-tonight .stat { font-size: 1.6rem; }
 .a-tonight .muted { font-size: 0.8rem; }

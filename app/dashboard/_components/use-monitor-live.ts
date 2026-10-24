@@ -15,6 +15,9 @@ const clock = () => new Date().toTimeString().slice(0, 5);
 
 export interface TagHealth { online: boolean; lastSeen: number | null }
 
+// GET /dwell (monitor/actions/dwell.ts). Room ids are the home model's.
+export interface Dwell { roomId?: string; inRoomS: number; outOfBedS?: number; todayS: Record<string, number> }
+
 export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[]; activity: Activity[]; risks: RiskEvent[] }) {
   const { rooms } = initial;
   const lastMove = initial.activity.findLast((a) => a.kind === "move");
@@ -28,6 +31,8 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
   const [source, setSource] = useState<LocationSource>();
   const sourceRef = useRef<LocationSource>("ble");
   const [tag, setTag] = useState<TagHealth>();
+  const [dwell, setDwell] = useState<Dwell>();
+  const lastState = useRef(new Map<string, string>()); // risk id -> state, so the timeline skips reminder-count updates
 
   useEffect(() => {
     let ws: WebSocket;
@@ -87,13 +92,20 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
               state: frame.state,
               source: sourceRef.current,
               startedAt: prev.find((r) => r.id === frame.riskEventId)?.startedAt ?? time,
+              graceUntil: frame.graceUntil,
+              cues: frame.cues,
             }, ...prev.filter((r) => r.id !== frame.riskEventId)]);
-            setEntries((prev) => [...prev, {
-              id: `risk-${Date.now()}`,
-              time,
-              kind: "risk" as const,
-              text: `Risk: ${frame.kind} in ${roomName(rooms, frame.roomId)}`,
-            }]);
+            // One timeline line per change of state, not one per reminder.
+            const was = lastState.current.get(frame.riskEventId);
+            lastState.current.set(frame.riskEventId, frame.state);
+            if (was !== frame.state) {
+              setEntries((prev) => [...prev, {
+                id: `risk-${Date.now()}`,
+                time,
+                kind: "risk" as const,
+                text: `Risk: ${frame.kind} in ${roomName(rooms, frame.roomId)} (${frame.state})`,
+              }]);
+            }
           }
         } catch {}
       };
@@ -107,6 +119,12 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
         if (!closed) setTag({ online: !!h.tagOnline, lastSeen: h.tagLastSeen ?? null });
       } catch {
         if (!closed) setTag(undefined);
+      }
+      try {
+        const res = await fetch(`${MONITOR}/dwell`, { cache: "no-store", signal: AbortSignal.timeout(2000) });
+        if (res.ok && !closed) setDwell((await res.json()) as Dwell);
+      } catch {
+        if (!closed) setDwell(undefined);
       }
     }
 
@@ -122,5 +140,5 @@ export function useMonitorLive(initial: { rooms: Room[]; receivers?: Receiver[];
   }, [rooms]);
 
   const listenersOnline = Object.values(listeners).filter(Boolean).length;
-  return { roomId: monitorRoom, since, entries, risks, connected, listenersOnline, source, tag };
+  return { roomId: monitorRoom, since, entries, risks, connected, listenersOnline, source, tag, dwell };
 }

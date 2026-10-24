@@ -4,7 +4,8 @@
 import type { PatientMode, PatientState, RiskEvent, RiskKind, ZoneRule } from "@/lib/types";
 import { cleanNote, closingLine, cueScript, greetingLine } from "@/lib/cues/script";
 import { HttpError, type MonitorModule } from "../module";
-import { createOutcomeLog, summarize } from "./analytics";
+import { createOutcomeLog, nightSummary, summarize } from "./analytics";
+import { createDwell } from "./dwell";
 import { createNotifier } from "./notify";
 import { ESCALATION, createResponder, type EscalationProfile, type Redirect } from "./responder";
 import { createRiskEngine, isQuiet, localMinutes, resolves, ruleFor } from "./risk";
@@ -152,8 +153,31 @@ const actions: MonitorModule = {
       }, GREETING_MS).unref();
     });
 
-    // How tonight's responses ended, for the analytics page.
-    ctx.http.get("/analytics/summary", () => summarize(outcomes.list()));
+    // Time away: where they are, for how long, out of bed at night, minutes per room today.
+    const dwell = createDwell({ timeZone: HOUSEHOLD.timezone, quiet: (t) => isQuiet(t, HOUSEHOLD), roomKind: (id) => room(id)?.kind });
+    ctx.bus.on("location", live((e) => dwell.onLocation(e.roomId)));
+    ctx.http.get("/dwell", () => dwell.state());
+
+    // How tonight's responses ended, for the analytics page, with last night in one paragraph.
+    const clock = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: HOUSEHOLD.timezone }).format(Date.parse(iso) || Date.now());
+    const lastNight = () => {
+      const since = Date.now() - 18 * 60 * 60_000;
+      return nightSummary(outcomes.list(), HOUSEHOLD.patientName, (o) => Date.parse(o.startedAt) > since && isQuiet(Date.parse(o.startedAt), HOUSEHOLD), clock);
+    };
+    ctx.http.get("/analytics/summary", () => ({ ...summarize(outcomes.list()), night: lastNight() }));
+
+    // MORNING_SUMMARY_SMS=1: text last night to the primary contact as quiet hours end. Off by default.
+    if (process.env.MORNING_SUMMARY_SMS === "1") {
+      let wasQuiet = night();
+      setInterval(() => {
+        const quietNow = night();
+        if (wasQuiet && !quietNow && !ctx.store.replaying) {
+          ctx.log("actions", "morning summary to primary");
+          notify.sms(process.env.CAREGIVER_PHONE_NUMBER ?? "", `Lantern, last night: ${lastNight()}`).catch((e) => ctx.log("actions", "morning summary failed:", (e as Error).message));
+        }
+        wasQuiet = quietNow;
+      }, 60_000).unref();
+    }
 
     // Alert log for the dashboard: numbers are never included, only who (primary or backup) and the context.
     ctx.http.get("/alerts", () => {

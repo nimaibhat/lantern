@@ -4,7 +4,18 @@ import Link from "next/link";
 import { roomName } from "@/lib/dashboard/rooms";
 import type { Activity, AuditItem, Household, Receiver, RiskEvent, Room, ScanSummary } from "@/lib/types";
 import { FloorPlan } from "./floor-plan";
+import { SayToTv } from "./say-to-tv";
 import { useMonitorLive } from "./use-monitor-live";
+
+const minutes = (s: number) => (s < 60 ? "under a minute" : `${Math.round(s / 60)} min`);
+const hhmm = (iso: string) => new Date(iso).toTimeString().slice(0, 5);
+
+// What Lantern is doing about a risk right now, in words (docs/cues.md).
+function progress(r: RiskEvent, name: string): string | undefined {
+  if (r.state === "detected" && r.graceUntil && Date.parse(r.graceUntil) > Date.now()) return `giving ${name} time until ${hhmm(r.graceUntil)}`;
+  if (r.cues && r.state !== "resolved") return r.cues === 1 ? "1 reminder so far" : `${r.cues} reminders so far`;
+  if (r.state === "resolved" && r.cues) return r.cues === 1 ? "back after 1 reminder" : `back after ${r.cues} reminders`;
+}
 
 const RISK_LABEL: Record<RiskEvent["kind"], string> = {
   "exit-approach": "Near the front door",
@@ -25,7 +36,10 @@ type Props = {
 };
 
 export function Overview({ household, rooms, receivers, auditItems, scan, ...initial }: Props) {
-  const { roomId, since, entries, risks, connected, listenersOnline, source, tag } = useMonitorLive({ rooms, receivers, ...initial });
+  const { roomId, since, entries, risks, connected, listenersOnline, source, tag, dwell } = useMonitorLive({ rooms, receivers, ...initial });
+  // Minutes per room today, largest first, named the way the scan names them.
+  const today = Object.entries(dwell?.todayS ?? {}).filter(([, s]) => s >= 60).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const most = today[0]?.[1] ?? 1;
   const openAudit = auditItems.filter((a) => a.status === "open");
   const high = openAudit.filter((a) => a.severity === "high").length;
   const online = connected ? listenersOnline : receivers.filter((r) => r.online).length;
@@ -48,7 +62,15 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
       <section className="card now-card">
         <p className="eyebrow">{household.patientName} is in the</p>
         <p className="now-room">{roomName(rooms, roomId)}</p>
-        <p className="muted">since {since}</p>
+        <p className="muted">
+          since {since}
+          {dwell?.roomId && ` · ${minutes(dwell.inRoomS)}`}
+        </p>
+        {dwell?.outOfBedS !== undefined && (
+          <p className="out-of-bed" role="status">
+            Out of bed for {minutes(dwell.outOfBedS)}
+          </p>
+        )}
         {tagLost && (
           <p className="tag-warn" role="status">
             {household.patientName}&apos;s tag has not been heard {tag.lastSeen ? `for ${Math.max(1, Math.round((Date.now() - tag.lastSeen) / 60_000))} min` : "yet"}.
@@ -81,8 +103,29 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
                   {r.startedAt} · {roomName(rooms, r.roomId)} · {r.trigger === "predicted" ? "predicted" : "detected"}
                   {r.source === "sim" && " · simulated"}
                 </span>
+                {progress(r, household.patientName) && <span className="risk-progress">{progress(r, household.patientName)}</span>}
               </div>
               <span className={`badge ${r.state}`}>{r.state}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <SayToTv name={household.patientName} />
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Time today</h2>
+        </div>
+        {today.length === 0 && <p className="muted">{dwell ? "Not enough time in any room yet." : "Live once the monitor is running."}</p>}
+        <ul className="dwell-list">
+          {today.map(([id, s]) => (
+            <li key={id}>
+              <span>{roomName(rooms, id)}</span>
+              <span className="dwell-bar" aria-hidden>
+                <span style={{ width: `${Math.max(4, Math.round((s / most) * 100))}%` }} />
+              </span>
+              <span className="mono muted">{minutes(s)}</span>
             </li>
           ))}
         </ul>

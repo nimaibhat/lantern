@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RiskEvent } from "@/lib/types";
-import { createOutcomeLog, summarize } from "./analytics";
+import { createOutcomeLog, nightSummary, summarize } from "./analytics";
 
 const risk = (id: string, patch: Partial<RiskEvent>): RiskEvent => ({
   id, householdId: "h1", kind: "kitchen-night", roomId: "kitchen", trigger: "detected", state: "detected", source: "ble",
@@ -33,4 +33,21 @@ test("outcomes: a redirect that worked, one that escalated, and a prediction tha
   assert.deepEqual(s.leadTimesS, [12]);
   assert.equal(s.open, 1);
   assert.equal(s.recent[0].id, "d");
+});
+
+test("which reminder worked, and last night in one paragraph", () => {
+  const log = createOutcomeLog();
+  log.onRisk(risk("a", { cues: 1 }));
+  log.onRisk(risk("a", { state: "resolved", resolvedAt: "2026-10-23T07:08:00.000Z" }));
+  log.onRisk(risk("b", { kind: "night-wandering", roomId: "hallway", startedAt: "2026-10-23T09:22:00.000Z" }));
+  log.onRisk(risk("b", { kind: "night-wandering", roomId: "hallway", startedAt: "2026-10-23T09:22:00.000Z", cues: 3, state: "escalated" }));
+  log.onRisk(risk("b", { kind: "night-wandering", roomId: "hallway", startedAt: "2026-10-23T09:22:00.000Z", state: "resolved", resolvedAt: "2026-10-23T09:40:00.000Z" }));
+
+  assert.deepEqual(summarize(log.list()).workedAfterCue, { 1: 1 });
+  const clock = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(Date.parse(iso));
+  assert.equal(
+    nightSummary(log.list(), "Rosa", () => true, clock),
+    "Rosa was up twice last night. 3:07 AM, kitchen: back after 1 reminder; 5:22 AM, up and about: family was texted.",
+  );
+  assert.equal(nightSummary([], "Rosa", () => true, clock), "Quiet night. Rosa did not need any reminders.");
 });

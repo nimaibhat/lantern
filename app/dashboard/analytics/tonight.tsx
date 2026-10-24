@@ -23,6 +23,16 @@ interface Summary {
   falseRedirects: number;
   medianReturnS?: number;
   recent: Outcome[];
+  night?: string; // last night in one paragraph
+  workedAfterCue?: Record<string, number>; // "0" settled on their own, "1" after the first reminder, ...
+}
+
+const ORDINAL = ["on their own", "after the first reminder", "after the second", "after the third"];
+
+// "Which reminder works": the families' and the OT's quickest read on whether the cues help.
+function whatWorks(by: Record<string, number> = {}): string | undefined {
+  const parts = Object.entries(by).sort(([a], [b]) => Number(a) - Number(b)).map(([k, n]) => `${n} ${ORDINAL[Number(k)] ?? `after ${k} reminders`}`);
+  return parts.length ? parts.join(" · ") : undefined;
 }
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -70,6 +80,8 @@ export function Tonight({ roomNames }: { roomNames: Record<string, string> }) {
         <p className="muted">{offline ? `The monitor is not reachable at ${MONITOR}. Start it with npm run dev:monitor.` : "Loading..."}</p>
       ) : (
         <>
+          {s.night && <p className="a-night">{s.night}</p>}
+          {whatWorks(s.workedAfterCue) && <p className="muted a-works">Back without a message: {whatWorks(s.workedAfterCue)}</p>}
           <div className="a-tonight">
             <div>
               <span className="stat">{s.responses}</span>
