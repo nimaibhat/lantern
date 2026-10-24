@@ -48,8 +48,14 @@ export function Shell({ householdName, children }: { householdName: string; chil
               <span className="status-dot" /> Monitoring
             </p>
           </div>
+          <div className="top-actions">
+            {pathname === "/dashboard" && (
+              <Link href="/dashboard/tracking" className="btn">Tracking</Link>
+            )}
+            <button className="btn ghost" onClick={toggleNight} suppressHydrationWarning>
               {night ? "Day mode" : "Night mode"}
             </button>
+          </div>
         </header>
         <main className="content">{children}</main>
       </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { roomName } from "@/lib/dashboard/rooms";
 import type { Activity, AuditItem, Household, Receiver, RiskEvent, Room, ScanSummary } from "@/lib/types";
 import { FloorPlan } from "./floor-plan";
+import { useMonitorLive } from "./use-monitor-live";
 
 const RISK_LABEL: Record<RiskEvent["kind"], string> = {
   "exit-approach": "Near the front door",
@@ -27,6 +28,7 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
   const { roomId, since, entries, risks, connected, listenersOnline, source, tag } = useMonitorLive({ rooms, receivers, ...initial });
   const openAudit = auditItems.filter((a) => a.status === "open");
   const high = openAudit.filter((a) => a.severity === "high").length;
+  const online = connected ? listenersOnline : receivers.filter((r) => r.online).length;
   // Only meaningful while listeners are up; with none online the receiver count already says what is wrong.
   const tagLost = connected && listenersOnline > 0 && tag && !tag.online;
 
@@ -37,6 +39,7 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
           <h2>Home</h2>
           <span className="card-chips">
             {source === "sim" && <span className="badge sim">Simulated</span>}
+            <span className="muted mono">{connected ? "live" : "offline"}</span>
           </span>
         </div>
         <FloorPlan rooms={rooms} currentRoomId={roomId} />

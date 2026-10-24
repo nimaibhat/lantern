@@ -261,6 +261,9 @@
         "y": 216
       },
       "heightIn": 36
+    },
+    {
+      "receiverId": "living-room",
       "position": {
         "x": 300,
         "y": 216
