@@ -47,9 +47,14 @@ export function RoutineEditor({ initialSteps, rooms }: { initialSteps: RoutineSt
           <h1>Daily routine</h1>
           <p className="muted">Each step shows a real photo of the room and plays a recorded voice.</p>
         </div>
-        <Link href="/routine" className="btn">
-          Open patient view
-        </Link>
+        <span className="page-actions">
+          <Link href="/signs" className="btn ghost">
+            Print door signs
+          </Link>
+          <Link href="/routine" className="btn">
+            Open patient view
+          </Link>
+        </span>
       </div>
 
       <form className="card add-step" onSubmit={add}>

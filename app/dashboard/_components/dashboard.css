@@ -185,6 +185,7 @@ body:has(.dash.night) {
 }
 
 .page-head p { margin-top: 6px; max-width: 60ch; }
+.page-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
 /* ─── Building blocks ─── */
 

@@ -1,0 +1,76 @@
+/* Printable door signs: high contrast, large type, nothing decorative. Two signs per printed page. */
+
+.signs {
+  min-height: 100vh;
+  padding: 32px 16px;
+  background: #fff;
+  color: #1a1714;
+  font-family: var(--font-heading), sans-serif;
+}
+
+.signs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto 24px;
+}
+
+.signs-head h1 { font-size: 1.6rem; }
+.signs-head p { color: #5c544c; font-size: 0.95rem; }
+
+.signs-print {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #c9772a;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sign-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  border: 2px dashed #b9b0a5; /* the cut line */
+  border-radius: 8px;
+  break-inside: avoid;
+}
+
+.sign img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* No photo yet: the name alone still works as a sign. */
+.sign.name-only { min-height: 220px; justify-content: center; }
+
+.sign h2 {
+  font-size: clamp(2.6rem, 9vw, 4.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+@media print {
+  .signs { padding: 0; }
+  .signs-head { display: none; }
+  .sign-grid { display: block; max-width: none; }
+  .sign { height: 48vh; margin-bottom: 2vh; justify-content: center; page-break-inside: avoid; }
+  .sign img { width: auto; height: 70%; }
+  .sign h2 { font-size: 64pt; }
+}
