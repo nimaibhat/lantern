@@ -38,7 +38,8 @@ function setup(opts: { voice?: VoiceCaller } = {}) {
       asked.push({ here, cue });
       return { message: "Rosa, it's still nighttime. Let's go back to bed.", detail: `You're in the ${here.roomId}.`, route: [here.roomId, "bedroom"], photoPath: "h1/bedroom.jpg" };
     },
-    closingFor: () => "Rosa, good night. Sleep well.",
+    closingFor: (_risk, roomId) => (roomId === "bedroom" ? "Rosa, good night. Sleep well." : "Rosa, thank you."),
+    settled: (roomId) => roomId === "bedroom",
     emitRisk: (r) => risks.push(r),
     emitPatient: (s) => screens.push(s),
     notify: {
@@ -79,7 +80,7 @@ function setup(opts: { voice?: VoiceCaller } = {}) {
   });
   // Up long enough ago that the grace period is over.
   const kitchen = () => risk("kitchen-night", "kitchen", 10);
-  return { responder, risks, screens, sent, asked, advance, risk, kitchen, modes: () => screens.map((s) => s.mode), states: () => risks.map((r) => r.state) };
+  return { responder, risks, screens, sent, asked, safe, advance, risk, kitchen, modes: () => screens.map((s) => s.mode), states: () => risks.map((r) => r.state) };
 }
 
 // Let promise callbacks (voice-call results) run.
@@ -351,4 +352,14 @@ test("through the monitor: a typed message shows on the TV, and help needs a run
   } finally {
     await monitor.close();
   }
+});
+
+test("leaving the kitchen for the TV room at night: a plain thank you, and the family hears Lantern is still watching", () => {
+  const s = setup();
+  s.safe.add("tv-room");
+  s.responder.onRisk(s.kitchen());
+  s.advance(GENTLE * S + 5 * S);
+  s.responder.onLocation("tv-room", 0);
+  assert.equal(s.screens.find((x) => x.mode === "calm")?.message, "Rosa, thank you.");
+  assert.match(s.sent.at(-1)!, /^sms \+15550001 Lantern update: Rosa has left the kitchen and is in the tv-room now \(3:0\d AM\)\. Lantern is still watching\.$/);
 });

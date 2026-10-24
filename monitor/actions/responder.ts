@@ -7,7 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Alert, Contact, PatientMode, PatientState, RiskEvent, RiskKind } from "@/lib/types";
-import { alertText, allClearText, backupText, callScript, handoffText, type FamilyFacts } from "@/lib/cues/family";
+import { alertText, allClearText, backupText, callScript, handoffText, movedOnText, type FamilyFacts } from "@/lib/cues/family";
 import type { CallOutcome } from "@/lib/cues/vapi";
 
 // Seconds. Cues start voiceAfterS after the glow and repeat every repeatEveryS, at most maxCues times.
@@ -66,7 +66,8 @@ export interface ResponderDeps {
   roomName: (roomId: string) => string;
   isSafe: (risk: RiskEvent, roomId: string, ts: number) => boolean;
   redirectFor: (risk: RiskEvent, here: Here, cue: number) => Redirect;
-  closingFor?: (risk: RiskEvent) => string | undefined; // said when they reach a safe room after a cue
+  closingFor?: (risk: RiskEvent, roomId: string) => string | undefined; // said when they reach a safe room after a cue
+  settled?: (roomId: string) => boolean; // back where they belong (bed at night): "no need to check". Default true.
   emitRisk: (risk: RiskEvent) => void;
   emitPatient: (state: PatientState) => void;
   notify: Notifier;
@@ -253,12 +254,17 @@ export function createResponder(deps: ResponderDeps) {
     if (run.risk.state !== "resolved") setRisk(run, { state: "resolved", resolvedAt: iso() });
 
     const back = why.startsWith("reached");
-    if (back && run.escalated) update(run, allClearText(deps.patientName, deps.roomName(run.here.roomId), clock(now())));
+    const to = run.here.roomId;
+    if (back && run.escalated) {
+      const at = clock(now());
+      const settled = deps.settled?.(to) ?? true;
+      update(run, settled ? allClearText(deps.patientName, deps.roomName(to), at) : movedOnText(deps.patientName, deps.roomName(run.risk.roomId), deps.roomName(to), at));
+    }
     if (ackedBy) update(run, handoffText(deps.patientName, contact(ackedBy)?.name || "Someone"), ackedBy);
 
     // Leave the screen alone if another response has taken it over.
     if (patient.riskEventId !== run.risk.id) return;
-    setPatient("calm", { roomId: run.here.roomId, ...(back && run.cues > 0 ? { message: deps.closingFor?.(run.risk) } : {}) });
+    setPatient("calm", { roomId: to, ...(back && run.cues > 0 ? { message: deps.closingFor?.(run.risk, to) } : {}) });
     later(CALM_MS, () => patient.mode === "calm" && setPatient("idle"));
   }
 

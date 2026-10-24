@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { alertText, allClearText, backupText, callScript, handoffText, situation, type FamilyFacts } from "./family";
+import { alertText, allClearText, backupText, callScript, handoffText, movedOnText, situation, type FamilyFacts } from "./family";
 
 const night: FamilyFacts = { name: "Rosa", kind: "kitchen-night", room: "Kitchen", since: "3:04 AM", reminders: 3 };
 
@@ -30,4 +30,8 @@ test("backup, call, all clear and handoff wording", () => {
   assert.match(callScript(night), /^This is Lantern\. Rosa has been up since 3:04 AM/);
   assert.equal(allClearText("Rosa", "Bedroom", "3:12 AM"), "Lantern update: Rosa is back in the bedroom (3:12 AM). No need to check.");
   assert.equal(handoffText("Rosa", "Maria"), "Lantern update: Maria is checking on Rosa now. No need to go.");
+});
+
+test("moving on without settling does not say no need to check", () => {
+  assert.equal(movedOnText("Rosa", "Kitchen", "TV room", "3:12 AM"), "Lantern update: Rosa has left the kitchen and is in the TV room now (3:12 AM). Lantern is still watching.");
 });

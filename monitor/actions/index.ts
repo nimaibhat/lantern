@@ -96,7 +96,9 @@ const actions: MonitorModule = {
           voicePath: slot && cue >= 2 ? `${householdId}/redirect-${slot}.m4a` : undefined,
         };
       },
-      closingFor: () => closingLine(HOUSEHOLD.patientName, night()),
+      // "Good night, sleep well" only in bed; leaving the kitchen for the TV room at 3 AM gets a plain thank you.
+      closingFor: (_risk, roomId) => closingLine(HOUSEHOLD.patientName, night() && room(roomId)?.kind === "bedroom"),
+      settled: (roomId) => !night() || room(roomId)?.kind === "bedroom",
       emitRisk: later((risk: RiskEvent) => ctx.bus.emit("risk", risk)),
       emitPatient: later((state) => ctx.bus.emit("patient", state)),
       notify,

@@ -42,8 +42,12 @@ export const backupText = (f: FamilyFacts, ackUrl: string) =>
 // Read aloud by a plain phone call when the voice agent is not set up.
 export const callScript = (f: FamilyFacts) => `This is Lantern. ${situation(f)} ${ask(f)}`;
 
-// Sent to everyone already texted once the person is back somewhere safe on their own.
+// Sent to everyone already texted once the person is back where they belong (in bed at night) on their own.
 export const allClearText = (name: string, room: string, at: string) => `Lantern update: ${name} is back in the ${lower(room)} (${at}). No need to check.`;
+
+// Out of the risky room but not settled (the TV room at 3 AM): honest, without "no need to check".
+export const movedOnText = (name: string, from: string, room: string, at: string) =>
+  `Lantern update: ${name} has left the ${lower(from)} and is in the ${lower(room)} now (${at}). Lantern is still watching.`;
 
 // Sent to the other contacts when one of them says they are on it.
 export const handoffText = (name: string, who: string) => `Lantern update: ${who} is checking on ${name} now. No need to go.`;
