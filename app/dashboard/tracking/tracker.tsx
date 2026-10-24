@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { earBat } from "@/lib/sensing/ear-bat";
 import { roughFeet } from "@/lib/sensing/feet";
 import { closestRoom, type Placement, type Reading } from "@/lib/sensing/nearest-room";
 import type { Receiver } from "@/lib/types";
@@ -15,7 +14,7 @@ type BleDevice = {
   addEventListener: (type: "advertisementreceived", listener: (event: AdEvent) => void) => void;
 };
 type Ble = {
-  requestDevice: (options: { filters: Array<{ name?: string; services?: string[] }> }) => Promise<BleDevice>;
+  requestDevice: (options: { filters: Array<{ name?: string; namePrefix?: string; services?: string[] }> }) => Promise<BleDevice>;
 };
 
 function bluetooth(): Ble | null {
@@ -29,34 +28,6 @@ function browserCanWatch(): boolean {
   if (!bt?.requestDevice) return false;
   const proto = (globalThis as { BluetoothDevice?: { prototype?: { watchAdvertisements?: unknown } } }).BluetoothDevice?.prototype;
   return typeof proto?.watchAdvertisements === "function";
-}
-
-function downloadEar(deviceId: string, label: string) {
-  const postUrl = `${location.origin}/api/tracking`;
-  // #region agent log
-  fetch("/api/tracking", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "view",
-      hub: false,
-      hostLocal: location.hostname === "localhost" || location.hostname === "127.0.0.1",
-      pairShown: true,
-      error: `pair ${location.protocol} host ${location.host} api ${/\/api\/tracking$/.test(postUrl)}`,
-      protocol: location.protocol,
-    }),
-  }).catch(() => {});
-  // #endregion
-  const bat = earBat(deviceId, postUrl, label);
-  const blob = new Blob([bat], { type: "application/octet-stream" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Lantern-${label.replace(/[^\w]+/g, "-") || "laptop"}.bat`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 async function onHub(): Promise<boolean> {
@@ -123,6 +94,14 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
       // #region agent log
       fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: here, hostLocal, pairShown: true }) }).catch(() => {});
       // #endregion
+      // This computer hears in a hidden listener. Opening the page keeps that going.
+      if (here && saved && name) {
+        fetch("/api/tracking", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "join", name, deviceId: saved, listen: true, hub: true, replace: false }),
+        }).catch(() => {});
+      }
     });
   }, []);
 
@@ -249,11 +228,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     setReadings((prev) => ({ ...prev, [id]: { id, online: true, rssi } }));
   }
 
-  async function saveLaptop(name: string, listen: boolean, hubMachine: boolean) {
+  async function saveLaptop(name: string, listen: boolean, hubMachine: boolean, replace = false) {
     const res = await fetch("/api/tracking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen, hub: hubMachine }),
+      body: JSON.stringify({ action: "join", name, deviceId: deviceIdRef.current, listen, hub: hubMachine, replace }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || typeof data.deviceId !== "string") {
@@ -277,76 +256,84 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     return true;
   }
 
-  function claim(id: string, label: string) {
-    if (!/^ear-[a-f0-9]{8}$/i.test(id)) return;
-    setNote("");
-    setBusy(true);
-    deviceIdRef.current = id;
+  // Chrome on a Mac can hear the iPhone from this page. A downloaded script cannot run there.
+  async function listenInPage(): Promise<"watching" | "cancelled" | "unavailable"> {
+    if (!browserCanWatch()) return "unavailable";
     try {
-      downloadEar(id, label);
+      const device = await bluetooth()!.requestDevice({
+        filters: [{ namePrefix: "Lantern" }, { services: [SERVICE] }],
+      });
+      device.addEventListener("advertisementreceived", (event) => {
+        if (typeof event.rssi !== "number") return;
+        latest.current = { rssi: event.rssi, at: Date.now() };
+        const id = deviceIdRef.current;
+        if (id) remember(id, event.rssi);
+      });
+      await device.watchAdvertisements?.();
+      return "watching";
     } catch (err) {
-      const message = err instanceof Error ? err.message : "error";
-      setNote("Could not start listening. Try again.");
-      // #region agent log
-      fetch("/api/tracking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "view", hub: false, hostLocal: location.hostname === "localhost" || location.hostname === "127.0.0.1", pairShown: false, error: message, protocol: location.protocol }) }).catch(() => {});
-      // #endregion
-      setBusy(false);
-      return;
+      const picked = err instanceof DOMException ? err.name : "";
+      if (picked === "NotFoundError" || picked === "AbortError") return "cancelled";
+      return "unavailable";
     }
-    setNote("Open the Lantern file that downloaded and leave that window open. That pairs this laptop.");
-    void saveLaptop(label, false, false).finally(() => setBusy(false));
   }
 
-  async function connect(name: string) {
-    setNote("");
-    const trimmed = name.replace(/\s+/g, " ").trim();
+  async function pairLaptop(label: string, existingId?: string) {
+    const trimmed = label.replace(/\s+/g, " ").trim();
     if (!trimmed) {
       setNote("Type a name.");
       return;
     }
-    if (watchingRef.current) return;
+    setNote("");
     setBusy(true);
+    if (existingId) deviceIdRef.current = existingId;
     try {
-      // Windows Chrome never delivers iPhone advertisements, so that laptop listens on its own.
-      if (!/Windows/i.test(navigator.userAgent) && browserCanWatch()) {
-        try {
-          const device = await bluetooth()!.requestDevice({
-            filters: [{ name: "LanternTag" }, { services: [SERVICE] }],
-          });
-          device.addEventListener("advertisementreceived", (event) => {
-            if (typeof event.rssi !== "number") return;
-            latest.current = { rssi: event.rssi, at: Date.now() };
-            const id = deviceIdRef.current;
-            if (id) remember(id, event.rssi);
-          });
-          await device.watchAdvertisements?.();
-          await saveLaptop(trimmed, false, false);
-          return;
-        } catch (err) {
-          const picked = err instanceof DOMException ? err.name : "";
-          if (picked === "NotFoundError") {
-            setNote("Pick LanternTag in the list.");
-            return;
-          }
-        }
+      const watched = await listenInPage();
+      if (watched === "cancelled") {
+        setNote("Pick LanternTag in the list.");
+        return;
+      }
+      if (watched === "watching") {
+        const saved = await saveLaptop(trimmed, false, false);
+        if (saved) setNote("This laptop is listening. Leave this page open.");
+        return;
       }
       const saved = await saveLaptop(trimmed, false, false);
       const id = deviceIdRef.current;
       if (!saved || !id) return;
-      if (await askAgent(id)) return;
+      if (await askAgent(id)) {
+        setNote("This laptop is listening. Leave this page open.");
+        return;
+      }
       const here = await onHub();
       setHub(here);
       if (here) {
-        await saveLaptop(trimmed, true, true);
+        await saveLaptop(trimmed, true, true, true);
+        setNote("This laptop is listening.");
         return;
       }
-      downloadEar(id, trimmed);
-      setNote("Open the Lantern file that downloaded and leave that window open. That pairs this laptop.");
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        setNote("This iPhone is the beacon. Open Tracking in Chrome on the Mac and press Pair.");
+      } else if (/Mac/i.test(navigator.userAgent)) {
+        setNote("Open this page in Chrome on the Mac, then press Pair.");
+      } else {
+        setNote("This Windows browser cannot hear the phone. Listening runs on the computer where the site is open.");
+      }
     } catch {
-      setNote("Could not start listening. Try that name again.");
+      setNote("Could not start listening. Try again.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function claim(id: string, label: string) {
+    if (!/^ear-[a-f0-9]{8}$/i.test(id)) return;
+    void pairLaptop(label, id);
+  }
+
+  async function connect(name: string) {
+    if (watchingRef.current) return;
+    await pairLaptop(name);
   }
 
   async function remove(id: string) {

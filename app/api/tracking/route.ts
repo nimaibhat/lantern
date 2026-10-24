@@ -1,5 +1,5 @@
 import { appendFileSync } from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import os from "os";
 import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
@@ -196,13 +196,52 @@ function quiet(at: string | null): boolean {
   return Date.now() - new Date(at).getTime() > 15000;
 }
 
-async function listenHere(receiverId: string): Promise<boolean> {
+function scannerPids(): Promise<{ pid: number; id: string | null }[]> {
+  if (process.platform !== "win32") return Promise.resolve([]);
+  return new Promise((resolve) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'listener\\.py' } | ForEach-Object { $_.ProcessId.ToString() + '|' + $_.CommandLine }"],
+      { windowsHide: true, timeout: 8000 },
+      (err, stdout) => {
+        if (err) return resolve([]);
+        resolve(
+          String(stdout)
+            .split(/\r?\n/)
+            .map((line) => {
+              const bar = line.indexOf("|");
+              if (bar < 1) return { pid: 0, id: null };
+              const pid = Number(line.slice(0, bar));
+              const cmd = line.slice(bar + 1);
+              const id = /--id\s+(ear-[a-f0-9]{8})/i.exec(cmd)?.[1]?.toLowerCase() ?? null;
+              return { pid, id };
+            })
+            .filter((row) => row.pid > 0),
+        );
+      },
+    );
+  });
+}
+
+function killPid(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, () => resolve());
+  });
+}
+
+// One Windows radio can scan. A listener already running is left alone unless this laptop is switching rooms.
+async function listenHere(receiverId: string, replace: boolean): Promise<boolean> {
   const running = earProc();
   if (running.id === receiverId && running.proc && running.proc.exitCode == null) return true;
+  const scanners = await scannerPids();
+  if (scanners.some((row) => row.id === receiverId)) return true;
+  if (!replace && scanners.length > 0) return true;
+  for (const row of scanners) await killPid(row.pid);
+  if (running.proc?.pid) await killPid(running.proc.pid);
   return startEar(receiverId);
 }
 
-async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean }) {
+async function join(body: { name?: string; deviceId?: string; listen?: boolean; hub?: boolean; replace?: boolean }) {
   const label = cleanName(body.name);
   if (!label) return Response.json({ error: "Type a name." }, { status: 400 });
 
@@ -231,7 +270,7 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
     agentLog("A", "app/api/tracking/route.ts:join", "join failed", { label, error: error.message });
     return Response.json({ error: "Could not save that device." }, { status: 500 });
   }
-  const listening = body.listen && body.hub ? await listenHere(receiverId) : false;
+  const listening = body.listen && body.hub ? await listenHere(receiverId, !!body.replace) : false;
   agentLog("A", "app/api/tracking/route.ts:join", "laptop joined", { deviceId: receiverId, label, listen: !!body.listen, hub: !!body.hub, listening });
   return Response.json({ ok: true, deviceId: receiverId, label, listening });
 }
