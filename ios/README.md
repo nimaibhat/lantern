@@ -1,7 +1,8 @@
-# Lantern Scan (iPhone app)
+# Lantern (iPhone app)
 
-A small companion app that scans the home with Apple RoomPlan and uploads it to the Lantern website.
-It holds no API keys. It only talks to the website, using a pairing code from the dashboard.
+One app with two tabs. **Scan** maps the home with Apple RoomPlan and uploads it to the Lantern website; it holds
+no API keys and only talks to the website, using a pairing code from the dashboard. **Tag** broadcasts the Bluetooth
+signal the room listeners hear; it needs no pairing.
 
 ```
 Pair (code from Dashboard > Settings) -> name a room -> scan it (tap the camera 2 to 4 times) -> repeat -> Upload
@@ -11,26 +12,25 @@ The website then builds the floor plan, runs the accessibility rules immediately
 
 ## Requirements
 
-- An iPhone with LiDAR: iPhone 12 Pro or newer **Pro** model (or an iPad Pro from 2020 on), on iOS 17 or later
+- An iPhone with LiDAR: iPhone 12 Pro or newer **Pro** model (or an iPad Pro from 2020 on), on iOS 17 or later (scanning only; the Tag tab works on any iPhone on iOS 17)
 - A Mac with Xcode
 - A free Apple ID (no paid developer account needed; the app has to be reinstalled every 7 days)
 
 ## Set up the Xcode project (one time)
 
-1. Xcode > File > New > Project > **iOS App**.
-   - Product name: `LanternScan`, Interface: **SwiftUI**, Language: **Swift**, no tests.
-   - Save it anywhere **outside** this repo (or in `ios/` and add the `.xcodeproj` later). Xcode's build folders should not be committed.
-2. Delete the generated `ContentView.swift` and `LanternScanApp.swift`.
-3. Drag every `.swift` file from `ios/LanternScan/` **and the `Fonts` folder** into the project. Choose **Reference files in place** (or copy them) and tick the app target for all of them. The fonts register themselves at launch, so there is no font entry to add to Info.plist.
-4. Target > **General**: set Minimum Deployments to **iOS 17.0**.
-5. Target > **Signing & Capabilities**: Team = your Apple ID (Personal Team). Change the bundle identifier if Xcode complains, e.g. `com.yourname.lanternscan`.
-6. Target > **Info** (Custom iOS Target Properties), add:
+The project is generated from `ios/project.yml` (one app, Lantern, with a Scan tab and a Tag tab), so there is nothing to set up by hand.
 
-   | Key | Value |
-   |---|---|
-   | Privacy - Camera Usage Description | `Lantern Scan uses the camera to measure your rooms.` |
-   | Privacy - Local Network Usage Description | `Lantern Scan connects to the Lantern website on your network.` |
-   | App Transport Security Settings > Allow Arbitrary Loads | `YES` (only needed for a plain `http://` dev server; remove it once the site is on https) |
+```bash
+brew install xcodegen   # once
+cd ios && xcodegen      # writes ios/Lantern.xcodeproj (not committed)
+open Lantern.xcodeproj
+```
+
+1. Xcode > Settings > Accounts: add your Apple ID (a free one works).
+2. Target LanternScan > Signing & Capabilities > Team = your Personal Team. Regenerating resets this unless you put your team id in `DEVELOPMENT_TEAM` in `project.yml`.
+3. If Xcode says the bundle identifier is taken, change `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` and run `xcodegen` again.
+
+Camera, local network and Bluetooth permissions, the iOS 17 target and the fonts are all in `project.yml`. `LanternScan/Info.plist` only allows plain `http://` to the dev server; remove that once the site is on https.
 
 ## Run it on your iPhone
 
@@ -57,7 +57,7 @@ If the phone cannot reach the Mac (some school and venue Wi-Fi blocks this), dep
 
 | File | What it does |
 |---|---|
-| `LanternScanApp.swift` | App entry; registers the fonts, shows pairing or the home screen |
+| `LanternScanApp.swift` | App entry; registers the fonts; Scan tab (pairing or the home screen) and Tag tab |
 | `Theme.swift` | The website's look: warm stone and walnut colors (light and dark), amber accent, Tomorrow and Geist fonts, cards, buttons and chips |
 | `Fonts/` | Tomorrow, Geist and Geist Mono (SIL Open Font License, see the OFL files) |
 | `ScanStore.swift` | App state: pairing, scanned rooms, the shared AR session, upload |
@@ -65,6 +65,8 @@ If the phone cannot reach the Mac (some school and venue Wi-Fi blocks this), dep
 | `PairView.swift` | Enter the website address and pairing code |
 | `HomeView.swift` | Name rooms, start scans, upload |
 | `RoomScanView.swift` | Wraps Apple's `RoomCaptureView`, takes photos from the AR camera |
+| `TagView.swift` | Tag tab: Start and Stop, time on air, a warning if the app leaves the foreground |
+| `TagBroadcaster.swift` | Advertises the Bluetooth service UUID and the name `LanternTag` that the listeners look for |
 
 ## Preview without a LiDAR phone
 
@@ -74,4 +76,4 @@ The pairing, home and upload screens run in the iOS Simulator (scanning itself n
 
 - **"No such module RoomPlan" or LiDAR message:** the device has no LiDAR, or the deployment target is below iOS 17.
 - **Pair fails with a network error:** check the address, the Wi-Fi, and the Local Network permission (Settings > Lantern Scan).
-- **Upload works but the floor plan looks wrong:** send the uploaded `room-0.json` (Supabase > Storage > scans) so the parser in `lib/scan/parse.ts` can be adjusted. It was written against RoomPlan's documented JSON shape and a synthetic fixture, not a real scan yet.
+- **Upload works but the floor plan looks wrong:** send the uploaded `room-0.json` (Supabase > Storage > scans) so the parser in `lib/world/parse.ts` can be adjusted. It was written against RoomPlan's documented JSON shape and a synthetic fixture, not a real scan yet.

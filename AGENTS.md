@@ -45,8 +45,8 @@ lib/sensing/         browser helpers for Devices and Tracking
 lib/analytics/       analytics helpers
 lib/supabase/        server-only Supabase client
 components/world/    3D scene and avatar
-ios/LanternScan/     SwiftUI RoomPlan scan app
-ios/LanternTag/      SwiftUI BLE tag broadcaster app
+ios/LanternScan/     SwiftUI phone app: Scan tab (RoomPlan) and Tag tab (BLE broadcaster)
+ios/project.yml      XcodeGen spec (cd ios && xcodegen)
 listener/            Python BLE listeners (bleak, runs on laptop receivers)
 monitor/             Node service: HTTP + WS server, module host
 monitor/world/       serves the newest home model, routes through doors

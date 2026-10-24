@@ -2,7 +2,7 @@
 # Aarnav: add your GitHub handle to the lines marked (Aarnav) once you have repo access.
 
 # Saran: Bluetooth, devices, monitor host
-/ios/LanternTag/                @SaranKalaiyarasan
+/ios/LanternScan/Tag*.swift     @SaranKalaiyarasan
 /listener/                      @SaranKalaiyarasan
 /monitor/*.ts                   @SaranKalaiyarasan
 /monitor/sensing/               @SaranKalaiyarasan
