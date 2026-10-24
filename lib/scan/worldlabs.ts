@@ -37,17 +37,20 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // Photos must be URLs World Labs can download, so pass signed URLs.
-// Multi-image prompts need a direction per photo. We don't record compass headings yet,
-// so up to four photos are spread evenly around the room (the app asks you to turn while shooting).
+// The photos are taken freely around the room, not at known headings, so they go in without directions and
+// World Labs works out how they fit together (reconstruction mode, up to 8 photos).
+const MAX_PHOTOS = 8;
+
 export async function startWorld(roomName: string, photoUrls: string[]): Promise<string> {
   const text_prompt = `The ${roomName.toLowerCase()} of a real home. Keep the layout, furniture, and lighting as they appear in the photos.`;
-  const photos = photoUrls.slice(0, 4);
+  const photos = photoUrls.slice(0, MAX_PHOTOS);
   const world_prompt =
     photos.length === 1
       ? { type: "image", image_prompt: { source: "uri", uri: photos[0] }, text_prompt }
       : {
           type: "multi-image",
-          multi_image_prompt: photos.map((uri, i) => ({ azimuth: [0, 90, 180, 270][i], content: { source: "uri", uri } })),
+          multi_image_prompt: photos.map((uri) => ({ content: { source: "uri", uri } })),
+          reconstruct_images: true,
           text_prompt,
         };
 

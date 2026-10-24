@@ -11,6 +11,7 @@ let base = "";
 before(async () => {
   // Noon, so night rules never add risk frames and these tests pass at any hour.
   process.env.DEMO_HOUR = "12";
+  process.env.HOME_MODEL_SOURCE = "fixture"; // the room ids below are the fixture's, not whatever home was scanned last
   monitor = await startMonitor({ ...loadConfig({}), port: 0, debug: true });
   base = `http://localhost:${monitor.port}`;
 });

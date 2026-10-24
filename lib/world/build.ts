@@ -3,7 +3,7 @@
 // from the previous model so a re-scan does not undo where the laptops were placed.
 
 import type { Anchor, Hazard, HomeDoor, HomeModel, HomeRoom, RoomKind, Vec2 } from "@/lib/types";
-import { distance, nearestPointInPolygon, pointInPolygon, polygonCentroid } from "./geometry";
+import { distance, edgeDistance, innerPoint, sharedEdge, nearestPointInPolygon, pointInPolygon, polygonCentroid } from "./geometry";
 import type { ParsedRoom } from "./parse";
 
 const DOOR_MATCH_IN = 18; // a door belongs to a room if its center is this close to the room's outline
@@ -15,6 +15,7 @@ export const slug = (name: string) =>
 
 export function kindFor(name: string): RoomKind {
   const n = name.toLowerCase();
+  if (/closet|pantry|storage/.test(n)) return "other"; // before "hall": a hall closet is not a hallway
   if (/bed/.test(n)) return "bedroom";
   if (/bath|toilet|restroom|wc/.test(n)) return "bathroom";
   if (/hall|corridor/.test(n)) return "hallway";
@@ -72,8 +73,9 @@ export function rotateRooms(rooms: ParsedRoom[], angle: number): ParsedRoom[] {
 
 // Rooms scanned in one session share a world origin. Square them to the plan axes (so clearances measured
 // along x and y are true), then shift them together so the plan starts at (0, 0).
-export function normalize(parsed: ParsedRoom[]): ParsedRoom[] {
-  const rooms = rotateRooms(parsed, wallAngle(parsed));
+// turnDeg turns the squared plan clockwise in 90 degree steps, so it can match the home's paper floor plan.
+export function normalize(parsed: ParsedRoom[], turnDeg = 0): ParsedRoom[] {
+  const rooms = rotateRooms(parsed, wallAngle(parsed) - (turnDeg * Math.PI) / 180);
   const pts = rooms.flatMap((r) => [...r.polygon, ...r.walls.flatMap((w) => [w.start, w.end])]);
   if (pts.length === 0) return rooms;
   const dx = Math.min(...pts.map((p) => p.x)), dy = Math.min(...pts.map((p) => p.y));
@@ -146,6 +148,9 @@ export interface BuildOptions {
   hazards?: Hazard[];
   photoPaths?: string[][]; // per parsed room, same order
   ids?: string[]; // force room ids (for example to avoid ids used by another household)
+  drawn?: { name: string; polygon: Vec2[] }[]; // rooms the scan missed, drawn by hand in plan inches (closets)
+  outlines?: Record<string, Vec2[]>; // by room name: a hand-corrected outline in plan inches
+  open?: [string, string][]; // by room name: rooms with no wall between them, joined along their shared edge
 }
 
 export function buildHomeModel(parsed: ParsedRoom[], opts: BuildOptions): HomeModel {
@@ -153,13 +158,13 @@ export function buildHomeModel(parsed: ParsedRoom[], opts: BuildOptions): HomeMo
   const ids = opts.ids ?? uniqueIds(rooms0.map((r) => r.name));
 
   const rooms: HomeRoom[] = rooms0.map((r, i) => {
-    const polygon = clockwise(r.polygon);
+    const polygon = clockwise(opts.outlines?.[r.name] ?? r.polygon);
     return {
       id: ids[i],
       name: r.name,
       kind: kindFor(r.name),
       polygon,
-      centroid: roundPoint(polygonCentroid(polygon)),
+      centroid: roundPoint(centreOf(polygon)),
       heightIn: Math.round(r.heightIn),
       walls: r.walls,
       objects: r.objects,
@@ -171,6 +176,21 @@ export function buildHomeModel(parsed: ParsedRoom[], opts: BuildOptions): HomeMo
     rooms,
     rooms0.flatMap((r) => r.openings.map((o) => ({ center: midpoint(o.start, o.end), widthIn: o.widthIn, kind: o.kind === "door" ? ("door" as const) : ("opening" as const) }))),
   );
+
+  // Hand-drawn rooms come after door matching, so a scanned door is never pinned to a closet drawn beside it.
+  const taken = new Set(ids);
+  for (const d of opts.drawn ?? []) {
+    const polygon = clockwise(d.polygon);
+    rooms.push({ id: uniqueIds([d.name], taken)[0], name: d.name, kind: kindFor(d.name), polygon, centroid: roundPoint(centreOf(polygon)), heightIn: rooms[0]?.heightIn ?? 96, objects: [], photoPaths: [] });
+  }
+
+  // An open plan has no wall to scan, so join those rooms with an opening as wide as the edge they share.
+  for (const [nameA, nameB] of opts.open ?? []) {
+    const a = rooms.find((r) => r.name === nameA), b = rooms.find((r) => r.name === nameB);
+    const edge = a && b && sharedEdge(a.polygon, b.polygon);
+    if (!edge) continue;
+    doors.push({ id: `${a.id}|${b.id}|open`, roomA: a.id, roomB: b.id, center: roundPoint(midpoint(edge[0], edge[1])), widthIn: Math.round(distance(edge[0], edge[1])), kind: "opening" });
+  }
 
   // Keep the old anchors for receivers whose room still exists; otherwise place new ones.
   const roomIds = new Set(rooms.map((r) => r.id));
@@ -186,6 +206,13 @@ export function buildHomeModel(parsed: ParsedRoom[], opts: BuildOptions): HomeMo
     hazards: opts.hazards ?? opts.prev?.hazards ?? [],
     assets: opts.prev?.assets,
   };
+}
+
+// The centroid when it is well inside the room, otherwise the most open point inside it (L and T shaped rooms).
+const CENTRE_CLEARANCE_IN = 12;
+export function centreOf(polygon: Vec2[]): Vec2 {
+  const c = polygonCentroid(polygon);
+  return pointInPolygon(c, polygon) && edgeDistance(c, polygon) >= CENTRE_CLEARANCE_IN ? c : innerPoint(polygon);
 }
 
 const midpoint = (a: Vec2, b: Vec2) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });

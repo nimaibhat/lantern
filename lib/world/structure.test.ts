@@ -18,6 +18,12 @@ test("unmatched ids fall back to structure order only when the counts agree", ()
   assert.equal(roomsFromStructure({}, [room("A", 0)]), undefined);
 });
 
+test("rooms without identifiers keep the structure order instead of all matching one room", () => {
+  const bare = (x: number) => ({ walls: room("", x).walls });
+  const rooms = roomsFromStructure({ rooms: [bare(1), bare(2), bare(3)] }, [bare(0), bare(0), bare(0)])!;
+  assert.deepEqual(rooms.map((r) => r.walls[0].transform[12]), [1, 2, 3]);
+});
+
 test("structure path", () => {
   assert.equal(structurePath("h1", "s1"), "h1/s1/structure.json");
 });

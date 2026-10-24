@@ -69,6 +69,45 @@ export function polygonCentroid(poly: Vec2[]): Vec2 {
   return { x: cx / (3 * a2), y: cy / (3 * a2) };
 }
 
+// The point inside the polygon farthest from its edges, on a grid of about 40 steps a side. For an L or T shaped
+// room the centroid can fall outside it (a T hallway's centroid can land in the room beside it), so labels and
+// the room's centre point use this instead.
+export function innerPoint(poly: Vec2[]): Vec2 {
+  if (poly.length < 3) return polygonCentroid(poly);
+  const b = bounds(poly);
+  const step = Math.max(b.width, b.height) / 40 || 1;
+  let best = polygonCentroid(poly), bestD = pointInPolygon(best, poly) ? edgeDistance(best, poly) : -1;
+  for (let x = b.center.x - b.width / 2 + step / 2; x < b.center.x + b.width / 2; x += step)
+    for (let y = b.center.y - b.height / 2 + step / 2; y < b.center.y + b.height / 2; y += step) {
+      const p = { x, y };
+      if (!pointInPolygon(p, poly)) continue;
+      const d = edgeDistance(p, poly);
+      if (d > bestD + 0.5) [best, bestD] = [p, d];
+    }
+  return best;
+}
+
+export const edgeDistance = (p: Vec2, poly: Vec2[]) => Math.min(...edges(poly).map(([a, b]) => distanceToSegment(p, a, b)));
+
+// Where two rooms meet along a straight, axis-aligned edge (within tol inches): the longest overlap of facing
+// edges, on the line halfway between them. Used for rooms that are open to each other with no wall between.
+export function sharedEdge(a: Vec2[], b: Vec2[], tol = 3): [Vec2, Vec2] | undefined {
+  let best: [Vec2, Vec2] | undefined, bestLen = 6; // shorter than 6 in is a corner touch, not a shared edge
+  for (const [p, q] of edges(a))
+    for (const [r, t] of edges(b)) {
+      for (const horizontal of [true, false]) {
+        const [u, v] = horizontal ? ["y", "x"] as const : ["x", "y"] as const;
+        if (Math.abs(p[u] - q[u]) > tol || Math.abs(r[u] - t[u]) > tol || Math.abs(p[u] - r[u]) > tol) continue;
+        const lo = Math.max(Math.min(p[v], q[v]), Math.min(r[v], t[v])), hi = Math.min(Math.max(p[v], q[v]), Math.max(r[v], t[v]));
+        if (hi - lo <= bestLen) continue;
+        const line = (p[u] + q[u] + r[u] + t[u]) / 4;
+        best = horizontal ? [{ x: lo, y: line }, { x: hi, y: line }] : [{ x: line, y: lo }, { x: line, y: hi }];
+        bestLen = hi - lo;
+      }
+    }
+  return best;
+}
+
 export function bounds(points: Vec2[]) {
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const minX = Math.min(...xs), minY = Math.min(...ys), maxX = Math.max(...xs), maxY = Math.max(...ys);

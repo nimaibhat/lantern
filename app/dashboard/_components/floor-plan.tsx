@@ -1,4 +1,5 @@
 import type { AuditItem, Room, Vec2 } from "@/lib/types";
+import { innerPoint } from "@/lib/world/geometry";
 
 export function roomCenter(room: Room): Vec2 {
   const n = room.outline.length || 1;
@@ -56,17 +57,15 @@ export function FloorPlan({
       )}
 
       {rooms.flatMap((room) =>
-        room.doors.map((d) => <line key={d.id} className="fp-door" x1={d.start.x} y1={d.start.y} x2={d.end.x} y2={d.end.y} />),
+        room.doors.map((d) => <line key={`${room.id}:${d.id}`} className="fp-door" x1={d.start.x} y1={d.start.y} x2={d.end.x} y2={d.end.y} />),
       )}
 
       {rooms.map((room) => {
-        // Labels sit along the bottom edge so they never cover furniture. Thin rooms like hallways keep them centered.
-        if (room.outline.length === 0) return null;
-        const c = roomCenter(room);
-        const top = Math.min(...room.outline.map((p) => p.y));
-        const bottom = Math.max(...room.outline.map((p) => p.y));
+        // At the most open point inside the room, so an L or T shaped room (a hallway) never labels its neighbour.
+        if (room.outline.length < 3) return null;
+        const c = innerPoint(room.outline);
         return (
-          <text key={room.id} className="fp-label" x={c.x} y={bottom - top < 60 ? c.y + 4 : bottom - 12}>
+          <text key={room.id} className="fp-label" x={c.x} y={c.y + 4}>
             {room.name}
           </text>
         );

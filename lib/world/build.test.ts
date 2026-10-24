@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { HomeModel } from "@/lib/types";
 import { auditHome, largestClearCircle } from "@/lib/audit/ada";
-import { buildHomeModel, kindFor, rotateRooms, slug } from "./build";
-import { adjacency, bounds, edges, roomAt } from "./geometry";
+import { buildHomeModel, centreOf, kindFor, normalize, rotateRooms, slug } from "./build";
+import { adjacency, bounds, distance, distanceToSegment, edges, roomAt, sharedEdge } from "./geometry";
+import { wallPieces } from "./walls";
 import { parseCapturedRoom } from "./parse";
 import { colMajor, ftIn, metersToInches, toFloor } from "./units";
 
@@ -88,4 +89,38 @@ test("slug and kind", () => {
   assert.equal(kindFor("Master Bedroom"), "bedroom");
   assert.equal(kindFor("Front door"), "front-door");
   assert.equal(kindFor("Den"), "tv-room");
+});
+
+test("normalize: turnDeg turns the plan clockwise to match a paper floor plan", () => {
+  const rooms = [scan("captured-room-bedroom.json", "Bedroom"), scan("captured-room-hallway.json", "Hallway")];
+  const box = (rs: ReturnType<typeof normalize>) => bounds(rs.flatMap((r) => r.polygon));
+  const flat = box(normalize(rooms)), turned = box(normalize(rooms, 90));
+  assert.ok(Math.abs(turned.width - flat.height) < 0.5 && Math.abs(turned.height - flat.width) < 0.5);
+  // Clockwise on a y-down plan: the bedroom's centre moves from (x, y) towards (H - y, x).
+  const c = (rs: ReturnType<typeof normalize>) => bounds(rs[0].polygon).center;
+  const a = c(normalize(rooms)), b = c(normalize(rooms, 90));
+  assert.ok(Math.abs(b.x - (flat.height - a.y)) < 0.5 && Math.abs(b.y - a.x) < 0.5);
+});
+
+test("a T shaped room's centre is inside it, and a hall closet is not a hallway", () => {
+  const t = [{ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 40 }, { x: 170, y: 40 }, { x: 170, y: 300 }, { x: 130, y: 300 }, { x: 130, y: 40 }, { x: 0, y: 40 }];
+  const c = centreOf(t);
+  assert.ok(c.x > 130 && c.x < 170 || c.y < 40);
+  assert.equal(kindFor("Hall closet"), "other");
+  assert.equal(kindFor("Hallway"), "hallway");
+});
+
+test("open-plan rooms are joined by an opening as wide as their shared edge, and the wall there is gone", () => {
+  const rooms = [scan("captured-room-bedroom.json", "Bedroom"), scan("captured-room-hallway.json", "Hallway")];
+  const base = buildHomeModel(rooms, { householdId: "h1" });
+  const [a, b] = base.rooms;
+  const shared = sharedEdge(a.polygon, b.polygon);
+  assert.ok(shared, "the fixture rooms share a wall");
+  const open = buildHomeModel(rooms, { householdId: "h1", open: [["Bedroom", "Hallway"]] });
+  const joint = open.doors.find((d) => d.id.endsWith("|open"))!;
+  assert.equal(joint.kind, "opening");
+  assert.equal(joint.widthIn, Math.round(distance(shared![0], shared![1])));
+  const mid = { x: (shared![0].x + shared![1].x) / 2, y: (shared![0].y + shared![1].y) / 2 };
+  const near = (h: HomeModel) => wallPieces(h).filter(([p, q]) => distanceToSegment(mid, p, q) < 2).length;
+  assert.ok(near(base) > 0 && near(open) === 0);
 });
