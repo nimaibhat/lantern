@@ -11,12 +11,13 @@ export interface RoomPosterior {
 
 export interface PositionEstimate {
   ts: number;
-  x: number; // inches, clamped inside roomId
+  x: number; // inches. With live readings the dot can lead roomId through a doorway by a moment
   y: number;
   roomId: string;
   confidence: number;
   source: LocationSource;
   velocity?: Vec2; // inches per second
+  spreadIn?: number; // inches: roughly how far the real spot may be from x, y (the floor grid's spread)
 }
 
 // Emitted only when the room changes.

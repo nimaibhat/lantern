@@ -10,6 +10,7 @@
     "dev:monitor": "tsx watch monitor/main.ts",
     "dev:agent": "py -u listener/agent.py",
     "dev:mock-rssi": "tsx tools/mock-rssi.ts",
+    "dev:mock-walk": "tsx tools/mock-walk.ts",
     "check-env": "tsx tools/check-env.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.monitor.json",
     "test": "tsx --test \"lib/**/*.test.ts\" \"monitor/**/*.test.ts\""
