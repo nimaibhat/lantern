@@ -13,6 +13,7 @@ export type Hazard = { title: string; detail: string; fix: string; severity: "hi
 
 // Bump when the prompt or schema changes so old answers are not reused.
 export const PROMPT_VERSION = "v2";
+export const MERGE_VERSION = "m2"; // the same for the room merge prompt
 
 export interface VisionCache {
   get(key: string): Promise<Hazard[] | undefined>;
@@ -52,24 +53,58 @@ export async function hazardsForPhoto(bytes: Buffer, roomName: string, ask: AskO
   }
 }
 
-// All of a room's photos in parallel; the same hazard seen in two photos is reported once (the first photo wins).
+// A room gets a short list, not every finding from every photo: a caregiver acts on a handful of fixes.
+export const MAX_PER_ROOM = 5;
+
+// A finding plus the index of the photo that shows it.
+export type Found = Hazard & { photo: number };
+
+// Merges one room's findings from all its photos into at most MAX_PER_ROOM real fixes (text only, no images).
+// Returns undefined on a refusal or empty answer (not cached).
+export type MergeRoom = (roomName: string, found: Found[]) => Promise<Found[] | undefined>;
+
+const SEVERITY = ["high", "medium", "low"];
+
+// Without the merge step: drop exact repeats, keep the most serious.
+export function topFindings(found: Found[]): Found[] {
+  const seen = new Set<string>();
+  return found
+    .filter((h) => {
+      const k = h.title.trim().toLowerCase();
+      return !seen.has(k) && !!seen.add(k);
+    })
+    .sort((a, b) => SEVERITY.indexOf(a.severity) - SEVERITY.indexOf(b.severity))
+    .slice(0, MAX_PER_ROOM);
+}
+
+async function mergeFindings(roomName: string, found: Found[], merge: MergeRoom, cache: VisionCache, log: (...a: unknown[]) => void): Promise<Found[]> {
+  if (found.length <= 1) return found;
+  const key = createHash("sha256").update(PROMPT_VERSION).update("\0").update(MERGE_VERSION).update("\0").update(roomName.toLowerCase()).update(JSON.stringify(found)).digest("hex");
+  const hit = (await cache.get(key).catch(() => undefined)) as Found[] | undefined;
+  if (hit) return hit;
+  try {
+    const merged = (await merge(roomName, found))?.filter((h) => found.some((f) => f.photo === h.photo));
+    if (!merged) return topFindings(found);
+    const kept = merged.slice(0, MAX_PER_ROOM);
+    await cache.set(key, kept).catch(() => {});
+    return kept;
+  } catch (e) {
+    log("Merging photo findings failed:", (e as Error).message);
+    return topFindings(found);
+  }
+}
+
+// All of a room's photos in parallel, then one merged list for the room, each item tied to the photo that shows it.
 export async function hazardsForRoom(
   room: { id: string; name: string; center?: Vec2 },
   photos: { path: string; jpeg: Buffer }[],
   ask: AskOne,
   cache: VisionCache,
-  log?: (...a: unknown[]) => void,
+  log: (...a: unknown[]) => void = console.warn,
+  merge?: MergeRoom,
 ): Promise<Item[]> {
   const perPhoto = await Promise.all(photos.map((p) => hazardsForPhoto(p.jpeg, room.name, ask, cache, log)));
-  const seen = new Set<string>();
-  const items: Item[] = [];
-  perPhoto.forEach((hazards, i) => {
-    for (const h of hazards) {
-      const k = h.title.trim().toLowerCase();
-      if (seen.has(k)) continue;
-      seen.add(k);
-      items.push({ roomId: room.id, source: "vision", ...h, photoPath: photos[i].path, location: room.center });
-    }
-  });
-  return items;
+  const found = perPhoto.flatMap((hazards, photo) => hazards.map((h) => ({ ...h, photo })));
+  const kept = merge ? await mergeFindings(room.name, found, merge, cache, log) : topFindings(found);
+  return kept.map(({ photo, ...h }) => ({ roomId: room.id, source: "vision", ...h, photoPath: photos[photo]?.path ?? photos[0]?.path, location: room.center }));
 }

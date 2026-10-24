@@ -1,5 +1,6 @@
 import { getContacts, getHousehold, getReceivers, getRooms } from "@/lib/dashboard/data";
 import { roomName } from "@/lib/dashboard/rooms";
+import { MobilityPicker } from "./mobility-picker";
 import { PairPhone } from "./pair-phone";
 import { RedirectMedia } from "./redirect-media";
 
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
             Patient
             <input defaultValue={household.patientName} />
           </label>
+          <MobilityPicker name={household.patientName} initial={household.mobility} />
           <label>
             Quiet hours start
             <input type="time" defaultValue={household.quietHoursStart} />

@@ -2,7 +2,7 @@
 // The 2010 ADA Standards are the benchmark. Private homes do not have to comply, so this is a draft for an
 // occupational therapist, and results near a limit say to verify with a tape measure.
 
-import type { AuditItem, HomeModel, HomeRoom, RoomObject, Vec2 } from "@/lib/types";
+import type { AuditItem, HomeDoor, HomeModel, HomeRoom, Mobility, RoomObject, Vec2 } from "@/lib/types";
 import { bounds, distanceToSegment, edges, pointInPolygon } from "@/lib/world/geometry";
 import { blocksFloor, boxEdges, distanceToBox, objectBox, rayDistance, type Seg } from "@/lib/world/walls";
 
@@ -33,48 +33,52 @@ function clearanceAt(room: HomeRoom, p: Vec2): number {
   return Math.min(toWalls, toObjects);
 }
 
+// What each way of getting around needs, in inches. The wheelchair numbers are the ADA's. The walker numbers are
+// the usual occupational therapy rule of thumb: a 24 in walker plus room for the hands, and a smaller turn since
+// a walker can be stepped around. Walking alone or with a cane needs no door or turning check, only a clear path.
+// Most interior doors in homes are 28 to 30 in clear: fine for a walker, tight for a wheelchair.
+export const NEEDS: Record<Mobility, { label: string; door?: number; route: number; turn?: number }> = {
+  none: { label: "someone walking", route: 24 },
+  cane: { label: "someone with a cane", route: 28 },
+  walker: { label: "a walker", door: 28, route: 32, turn: 48 },
+  wheelchair: { label: "a wheelchair", door: DOOR_MIN, route: ROUTE_MIN, turn: TURN_DIAMETER },
+};
+
+// Doors with nothing to check: a wall the caregiver marked as open plan, any scanned opening on that same open
+// stretch, and a bedroom door in the outer wall, which in an apartment is a closet the scan did not walk into.
+export function skipDoor(d: HomeDoor, room: HomeRoom, home: HomeModel): boolean {
+  if (d.id.endsWith("|open")) return true;
+  if (home.doors.some((o) => o.id.endsWith("|open") && ((o.roomA === d.roomA && o.roomB === d.roomB) || (o.roomA === d.roomB && o.roomB === d.roomA)))) return true;
+  return d.roomB === "outside" && room.kind === "bedroom";
+}
+
+export const clearWidth = (d: HomeDoor) => (d.kind === "door" ? d.widthIn - DOOR_FRAME_ALLOWANCE : d.widthIn);
+
 // Doors are checked once, from roomA, so a shared door is not reported twice. A doorless opening has no
 // leaf or stops in the way, so its measured width is its clear width.
-export function doorWidths(room: HomeRoom, home: HomeModel): AuditDraft[] {
+export function doorWidths(room: HomeRoom, home: HomeModel, mobility: Mobility = "walker"): AuditDraft[] {
+  const { door: need, label } = NEEDS[mobility];
+  if (!need) return [];
   return home.doors
-    .filter((d) => d.roomA === room.id)
+    .filter((d) => d.roomA === room.id && !skipDoor(d, room, home))
     .flatMap((d): AuditDraft[] => {
-      const clear = d.kind === "door" ? d.widthIn - DOOR_FRAME_ALLOWANCE : d.widthIn;
-      if (clear >= DOOR_MIN + NEAR_LIMIT_IN) return [];
+      const clear = clearWidth(d);
+      if (clear >= need) return [];
       const other = home.rooms.find((x) => x.id === d.roomB)?.name ?? "outside";
-      const what = d.kind === "door" ? "Door" : "Opening";
-      if (d.kind === "opening" && clear < DOOR_MIN) {
-        return [{
-          roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: clear <= DOOR_MIN - 4 ? "high" : "medium", location: d.center,
-          title: `${what} between ${room.name} and ${other} is narrow`,
-          detail: `The opening is ${r(clear)} in wide, below the ${DOOR_MIN} in a walker or wheelchair needs.${verify(clear, DOOR_MIN)}`,
-          fix: "Widen the opening or clear trim and anything stored beside it.",
-          measuredIn: r(clear), requiredIn: DOOR_MIN,
-        }];
-      }
-      if (clear >= DOOR_MIN) {
-        return [{
-          roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: "low", location: d.center,
-          title: `${what} between ${room.name} and ${other} is at the limit`,
-          detail: `${d.kind === "door" ? "Estimated clear width" : "The opening"} is ${r(clear)} in, just over the ${DOOR_MIN} in minimum.${verify(clear, DOOR_MIN)}`,
-          fix: d.kind === "door"
-            ? "Measure the opening with the door open 90 degrees; offset hinges add about 2 in if needed."
-            : "Measure the narrowest point of the opening, trim included.",
-          measuredIn: r(clear), requiredIn: DOOR_MIN,
-        }];
-      }
+      const opening = d.kind === "opening";
       return [{
-        roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: clear <= DOOR_MIN - 4 ? "high" : "medium", location: d.center,
-        title: `Door between ${room.name} and ${other} is narrow`,
-        detail: `Estimated clear width is ${r(clear)} in, below the ${DOOR_MIN} in a walker or wheelchair needs.${verify(clear, DOOR_MIN)}`,
-        fix: "Install offset (swing-clear) hinges, remove the door stop trim, or widen the opening.",
-        measuredIn: r(clear), requiredIn: DOOR_MIN,
+        roomId: room.id, source: "ada-rule", code: "ADA 404.2.3", severity: clear <= need - 4 ? "high" : "medium", location: d.center,
+        title: `${opening ? "Opening" : "Door"} between ${room.name} and ${other} is narrow for ${label}`,
+        detail: `${opening ? "The opening is" : "Estimated clear width is"} ${r(clear)} in; ${label} needs about ${need} in.${verify(clear, need)}`,
+        fix: opening ? "Widen the opening or clear trim and anything stored beside it." : "Install offset (swing-clear) hinges, remove the door stop trim, or widen the opening.",
+        measuredIn: r(clear), requiredIn: need,
       }];
     });
 }
 
 // Clear width along the walking line between each pair of doors, measured across the line by ray casting.
-export function routeWidth(room: HomeRoom, home: HomeModel): AuditDraft[] {
+export function routeWidth(room: HomeRoom, home: HomeModel, mobility: Mobility = "walker"): AuditDraft[] {
+  const { route: need, label } = NEEDS[mobility];
   const doors = home.doors.filter((d) => d.roomA === room.id || d.roomB === room.id);
   const segs = obstacles(room);
   const b = bounds(room.polygon);
@@ -102,13 +106,13 @@ export function routeWidth(room: HomeRoom, home: HomeModel): AuditDraft[] {
       if (w < narrowest) [narrowest, at] = [w, p];
     }
   }
-  if (!at || !Number.isFinite(narrowest) || narrowest >= ROUTE_MIN) return [];
+  if (!at || !Number.isFinite(narrowest) || narrowest >= need) return [];
   return [{
-    roomId: room.id, source: "ada-rule", code: "ADA 403.5.1", severity: narrowest < ROUTE_MIN - 6 ? "high" : "medium", location: at,
+    roomId: room.id, source: "ada-rule", code: "ADA 403.5.1", severity: narrowest < need - 6 ? "high" : "medium", location: at,
     title: `${room.name} walking path is narrow`,
-    detail: `The path narrows to ${r(narrowest)} in. An accessible route is at least ${ROUTE_MIN} in.${verify(narrowest, ROUTE_MIN)}`,
+    detail: `The path narrows to ${r(narrowest)} in; ${label} needs about ${need} in.${verify(narrowest, need)}`,
     fix: "Move furniture off the path, or keep the walls clear and add a handrail on one side.",
-    measuredIn: r(narrowest), requiredIn: ROUTE_MIN,
+    measuredIn: r(narrowest), requiredIn: need,
   }];
 }
 
@@ -135,16 +139,17 @@ export function largestClearCircle(room: HomeRoom): { diameter: number; at: Vec2
   return best;
 }
 
-export function turningSpace(room: HomeRoom): AuditDraft[] {
-  if (room.kind !== "bathroom" && room.kind !== "bedroom") return [];
+export function turningSpace(room: HomeRoom, mobility: Mobility = "wheelchair"): AuditDraft[] {
+  const { turn: need, label } = NEEDS[mobility];
+  if (!need || (room.kind !== "bathroom" && room.kind !== "bedroom")) return [];
   const { diameter, at } = largestClearCircle(room);
-  if (diameter >= TURN_DIAMETER) return [];
+  if (diameter >= need) return [];
   return [{
     roomId: room.id, source: "ada-rule", code: "ADA 304.3", severity: "medium", location: at,
     title: `Not enough turning space in the ${room.name.toLowerCase()}`,
-    detail: `The largest clear circle is about ${r(diameter)} in. A walker or wheelchair needs ${TURN_DIAMETER} in to turn.${verify(diameter, TURN_DIAMETER)}`,
+    detail: `The largest clear circle is about ${r(diameter)} in; ${label} needs about ${need} in to turn.${verify(diameter, need)}`,
     fix: "Move or remove a piece of furniture to open up floor space.",
-    measuredIn: r(diameter), requiredIn: TURN_DIAMETER,
+    measuredIn: r(diameter), requiredIn: need,
   }];
 }
 
@@ -214,15 +219,17 @@ export function fixturesToCheck(room: HomeRoom): AuditDraft[] {
   });
 }
 
-export function auditRoom(room: HomeRoom, home: HomeModel): AuditDraft[] {
+// Toilet clearance is about room for a caregiver to help with transfers, which comes with a walker or wheelchair.
+export function auditRoom(room: HomeRoom, home: HomeModel, mobility: Mobility = "walker"): AuditDraft[] {
+  const aided = mobility === "walker" || mobility === "wheelchair";
   return [
-    ...doorWidths(room, home),
-    ...routeWidth(room, home),
-    ...turningSpace(room),
-    ...toiletClearance(room),
+    ...doorWidths(room, home, mobility),
+    ...routeWidth(room, home, mobility),
+    ...turningSpace(room, mobility),
+    ...(aided ? toiletClearance(room) : []),
     ...bedClearance(room),
     ...fixturesToCheck(room),
   ];
 }
 
-export const auditHome = (home: HomeModel): AuditDraft[] => home.rooms.flatMap((room) => auditRoom(room, home));
+export const auditHome = (home: HomeModel, mobility: Mobility = "walker"): AuditDraft[] => home.rooms.flatMap((room) => auditRoom(room, home, mobility));

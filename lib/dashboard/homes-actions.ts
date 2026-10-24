@@ -3,7 +3,8 @@
 import { myHouseholdIds, rememberHousehold } from "@/lib/households";
 import { createPairCode } from "@/lib/scan/pairing";
 import { db } from "@/lib/supabase/server";
-import type { HomeModel } from "@/lib/types";
+import type { HomeModel, Mobility } from "@/lib/types";
+import { isMobility } from "@/lib/dashboard/mobility";
 import { getHomeModel } from "@/lib/world/store";
 
 // Add a home (/dashboard/new): create the household, pair the scanning app, then watch the scan arrive.
@@ -25,7 +26,7 @@ const PHOTO_URL_SECONDS = 60 * 60;
 
 const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
-export async function createHome(input: { name: string; patientName: string; timezone?: string }): Promise<NewHome> {
+export async function createHome(input: { name: string; patientName: string; mobility?: Mobility; timezone?: string }): Promise<NewHome> {
   if (!db) throw new Error("Adding a home needs the database. Fill in the Supabase keys in .env.local.");
   const name = clean(input.name, 60);
   const patientName = clean(input.patientName, 40);
@@ -41,7 +42,7 @@ export async function createHome(input: { name: string; patientName: string; tim
 
   const { data, error } = await db
     .from("households")
-    .insert({ name, patient_name: patientName, ...(validZone ? { timezone } : {}) })
+    .insert({ name, patient_name: patientName, mobility: isMobility(input.mobility) ? input.mobility : "none", ...(validZone ? { timezone } : {}) })
     .select("id")
     .single();
   if (error || !data) throw new Error(error?.message ?? "Could not add the home.");

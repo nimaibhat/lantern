@@ -47,6 +47,7 @@ export const getHousehold = cache(async (): Promise<Household> => {
     id: h.id,
     name: h.name,
     patientName: h.patient_name,
+    mobility: h.mobility ?? "none",
     quietHoursStart: hhmm(h.quiet_hours_start),
     quietHoursEnd: hhmm(h.quiet_hours_end),
     timezone: h.timezone,

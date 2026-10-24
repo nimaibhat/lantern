@@ -7,6 +7,7 @@ export const household: Household = {
   id: "h1",
   name: "The Alvarez home",
   patientName: "Rosa",
+  mobility: "walker",
   quietHoursStart: "21:00",
   quietHoursEnd: "07:00",
   timezone: "America/New_York",

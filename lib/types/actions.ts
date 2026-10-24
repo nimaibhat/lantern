@@ -3,10 +3,15 @@
 import type { LocationSource } from "./sensing";
 import type { RoomKind } from "./world";
 
+// How the person gets around. It decides which accessibility checks apply: doors and turning space only matter
+// for a walker or a wheelchair.
+export type Mobility = "none" | "cane" | "walker" | "wheelchair";
+
 export interface Household {
   id: string;
   name: string;
   patientName: string;
+  mobility: Mobility;
   quietHoursStart: string; // "21:00"
   quietHoursEnd: string; // "07:00"
   timezone: string; // IANA, e.g. "America/New_York"

@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import { BuildStage } from "./build-stage";
 import { createHome, homeProgress, newPairCode, type HomeProgress, type NewHome } from "@/lib/dashboard/homes-actions";
+import { MOBILITY_OPTIONS } from "@/lib/dashboard/mobility";
+import type { Mobility } from "@/lib/types";
 
 const POLL_MS = 3000;
 
 export function AddHome({ address }: { address: string }) {
   const [name, setName] = useState("");
   const [patientName, setPatientName] = useState("");
+  const [mobility, setMobility] = useState<Mobility>("none");
   const [home, setHome] = useState<NewHome & { name: string }>();
   const [progress, setProgress] = useState<HomeProgress>();
   const [busy, setBusy] = useState(false);
@@ -20,7 +23,7 @@ export function AddHome({ address }: { address: string }) {
     setBusy(true);
     setError("");
     try {
-      const made = await createHome({ name, patientName, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+      const made = await createHome({ name, patientName, mobility, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
       setHome({ ...made, name: name.trim() });
     } catch (err) {
       setError((err as Error).message);
@@ -85,6 +88,16 @@ export function AddHome({ address }: { address: string }) {
               <label>
                 First name of the person who lives there
                 <input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Grace" maxLength={40} required />
+              </label>
+              <label>
+                How they get around
+                <select value={mobility} onChange={(e) => setMobility(e.target.value as Mobility)}>
+                  {MOBILITY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <button className="btn" disabled={busy}>
                 {busy ? "Creating home" : "Create home"}

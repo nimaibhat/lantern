@@ -546,7 +546,8 @@
   color: var(--d-muted);
 }
 
-.add-form input {
+.add-form input,
+.add-form select {
   font: inherit;
   font-size: 1rem;
   padding: 10px 12px;
@@ -556,7 +557,8 @@
   color: var(--d-text);
 }
 
-.add-form input:focus {
+.add-form input:focus,
+.add-form select:focus {
   outline: 2px solid var(--d-accent);
   outline-offset: 1px;
 }

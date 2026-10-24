@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createPairCode } from "@/lib/scan/pairing";
 import { currentHouseholdId, writableHouseholdId } from "@/lib/households";
 import { db } from "@/lib/supabase/server";
-import type { AuditStatus, RoomPreview, RoutineStep } from "@/lib/types";
+import { replaceRuleItems } from "@/lib/audit/store";
+import type { AuditStatus, Mobility, RoomPreview, RoutineStep } from "@/lib/types";
+import { isMobility } from "@/lib/dashboard/mobility";
+import { getHomeModel, syncHazards } from "@/lib/world/store";
 import { startRoomPreview } from "@/lib/scan/room-preview";
 import { checkWorld } from "@/lib/scan/worldlabs";
 
@@ -20,6 +23,21 @@ export async function setAuditStatus(id: string, status: AuditStatus) {
   const { error } = await db.from("audit_items").update({ status }).eq("id", id).eq("household_id", householdId);
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard", "layout");
+}
+
+// How the person gets around decides which accessibility checks apply, so changing it re-runs the rules on the
+// newest scan right away. Returns how many rule findings there are now.
+export async function setMobility(mobility: Mobility): Promise<number> {
+  if (!isMobility(mobility)) throw new Error("Invalid mobility");
+  if (!db) return 0;
+  const householdId = await writableHouseholdId();
+  const { error } = await db.from("households").update({ mobility }).eq("id", householdId);
+  if (error) throw new Error(error.message);
+  const { model, saved } = await getHomeModel(householdId);
+  const count = saved ? (await replaceRuleItems(householdId, model, mobility)).length : 0;
+  if (saved) await syncHazards(householdId);
+  revalidatePath("/dashboard", "layout");
+  return count;
 }
 
 export async function addRoutineStep(input: { time: string; title: string; roomId: string }): Promise<RoutineStep> {

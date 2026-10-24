@@ -3,10 +3,10 @@
 // half-width away from every wall piece and piece of furniture (door gaps are open). A* then searches
 // between room centroids through the doors and reports the first door or spot that blocks the way.
 
-import type { HomeModel, Vec2 } from "@/lib/types";
+import type { HomeModel, Mobility, Vec2 } from "@/lib/types";
 import { bounds, distance, distanceToSegment, doorBetween, pointInPolygon } from "@/lib/world/geometry";
 import { blocksFloor, distanceToBox, doorAxis, objectBox, wallPieces } from "@/lib/world/walls";
-import type { AuditDraft } from "./ada";
+import { auditHome, doorWidths, type AuditDraft } from "./ada";
 
 export const CELL_IN = 2;
 
@@ -25,12 +25,12 @@ export interface Grid {
   free: Uint8Array; // 1 = passable
 }
 
-export function rasterize(home: HomeModel, radiusIn: number): Grid {
+export function rasterize(home: HomeModel, radiusIn: number, furniture = true): Grid {
   const b = bounds(home.rooms.flatMap((r) => r.polygon));
   const x0 = b.minX, y0 = b.minY;
   const cols = Math.ceil(b.width / CELL_IN), rows = Math.ceil(b.height / CELL_IN);
   const walls = wallPieces(home);
-  const boxes = home.rooms.flatMap((r) => (r.objects ?? []).filter(blocksFloor).map(objectBox));
+  const boxes = furniture ? home.rooms.flatMap((r) => (r.objects ?? []).filter(blocksFloor).map(objectBox)) : [];
   const free = new Uint8Array(cols * rows);
 
   for (let row = 0; row < rows; row++) {
@@ -143,12 +143,16 @@ export interface MobilityLeg {
   path: Vec2[];
   blockedAt?: Vec2;
   reason?: string;
+  // Why it failed: the door, furniture a caregiver can move, or the scanned walls themselves (rooms that overlap
+  // or a wall drawn across a doorway), which is a scan problem rather than something to fix at home.
+  cause?: "door" | "furniture" | "walls";
 }
 
 // Every door-connected pair of rooms, for one mobility device.
 export function planMobility(home: HomeModel, profile: Profile): MobilityLeg[] {
   const { radiusIn, label } = PROFILES[profile];
   const grid = rasterize(home, radiusIn);
+  let bare: Grid | undefined; // walls only, built the first time a route fails
   const byId = new Map(home.rooms.map((r) => [r.id, r]));
   const legs: MobilityLeg[] = [];
 
@@ -156,23 +160,37 @@ export function planMobility(home: HomeModel, profile: Profile): MobilityLeg[] {
     const a = byId.get(door.roomA), b = byId.get(door.roomB);
     if (!a || !b) continue;
     const result = planRoute(grid, a.centroid, b.centroid);
-    let reason: string | undefined;
+    let reason: string | undefined, cause: MobilityLeg["cause"];
     if (!result.ok) {
       const d = doorBetween(home, a.id, b.id)!;
-      reason = d.widthIn < radiusIn * 2
-        ? `the ${d.widthIn} in door is too narrow for a ${label} (needs about ${radiusIn * 2} in)`
-        : `furniture or a tight turn blocks a ${label}`;
-      if (d.widthIn < radiusIn * 2) result.blockedAt = d.center;
+      if (d.widthIn < radiusIn * 2) {
+        [cause, reason] = ["door", `the ${d.widthIn} in door is too narrow for a ${label} (needs about ${radiusIn * 2} in)`];
+        result.blockedAt = d.center;
+      } else {
+        bare ??= rasterize(home, radiusIn, false);
+        [cause, reason] = planRoute(bare, a.centroid, b.centroid).ok
+          ? ["furniture", `furniture blocks a ${label}`]
+          : ["walls", `the scanned walls leave no way through for a ${label}`];
+      }
     }
-    legs.push({ from: a.id, to: b.id, ...result, reason });
+    legs.push({ from: a.id, to: b.id, ...result, reason, cause });
   }
   return legs;
 }
 
-export function mobilityItems(home: HomeModel, profile: Profile): AuditDraft[] {
+// Legs through a door the door rule already reports are left out, so one narrow door is one item. Legs the
+// scanned walls block are left out too: nothing at home needs fixing, the scan needs a cleaner pass.
+export function mobilityItems(home: HomeModel, mobility: Mobility): AuditDraft[] {
+  if (mobility !== "walker" && mobility !== "wheelchair") return []; // walking alone or with a cane fits through any door
+  const profile: Profile = mobility;
   const names = new Map(home.rooms.map((r) => [r.id, r.name]));
+  const reported = new Set(home.rooms.flatMap((room) => doorWidths(room, home, profile)).map((i) => `${i.location?.x},${i.location?.y}`));
   return planMobility(home, profile)
-    .filter((leg) => !leg.ok)
+    .filter((leg) => !leg.ok && leg.cause !== "walls")
+    .filter((leg) => {
+      const d = doorBetween(home, leg.from, leg.to);
+      return !d || !reported.has(`${d.center.x},${d.center.y}`);
+    })
     .map((leg) => ({
       roomId: leg.from,
       source: "ada-rule" as const,
@@ -180,7 +198,12 @@ export function mobilityItems(home: HomeModel, profile: Profile): AuditDraft[] {
       severity: profile === "walker" ? ("high" as const) : ("medium" as const),
       title: `A ${PROFILES[profile].label} cannot get from ${names.get(leg.from)} to ${names.get(leg.to)}`,
       detail: `The route is blocked: ${leg.reason}.`,
-      fix: "Widen the opening or clear the path; the red line in the 3D view shows where it stops.",
+      fix: leg.cause === "furniture"
+        ? "Move the furniture to clear a path; the red line in the 3D view shows where it stops."
+        : "Widen the opening or clear the path; the red line in the 3D view shows where it stops.",
       location: leg.blockedAt,
     }));
 }
+
+// Everything the measurement rules report for this home and this person.
+export const ruleItems = (home: HomeModel, mobility: Mobility): AuditDraft[] => [...auditHome(home, mobility), ...mobilityItems(home, mobility)];
