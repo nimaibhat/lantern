@@ -935,6 +935,9 @@ body:has(.dash) {
 .media-row:first-child { border-top: 0; }
 .media-text { display: flex; flex-direction: column; gap: 4px; }
 .media-line { font-family: var(--font-heading), sans-serif; font-size: 1.05rem; }
+.media-text { flex: 1; min-width: 0; }
+.media-text textarea { width: 100%; resize: vertical; font-family: var(--font-heading), sans-serif; font-size: 1.05rem; line-height: 1.4; }
+.media-edit { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .media-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .media-photo .media-actions { align-items: flex-start; }
 .media-actions audio { height: 32px; max-width: 240px; }

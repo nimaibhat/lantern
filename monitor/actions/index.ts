@@ -1,11 +1,13 @@
 // Actions module (owner: Aarnav): risk rules, the responder, Twilio messages, the Roku wake-up and the
 // TV-room greeting (Part 6).
 
+import type { VoiceSlot } from "@/lib/dashboard/redirect-media";
 import type { PatientMode, PatientState, RiskEvent, RiskKind, ZoneRule } from "@/lib/types";
 import { cleanNote, closingLine, cueScript, greetingLine } from "@/lib/cues/script";
 import { HttpError, type MonitorModule } from "../module";
 import { createOutcomeLog, nightSummary, summarize } from "./analytics";
 import { createDwell } from "./dwell";
+import { createLines, loadLines } from "./lines";
 import { contactAddress, createNotifier } from "./notify";
 import { listenForAcks } from "./ntfy-acks";
 import { ESCALATION, createResponder, type EscalationProfile, type Redirect } from "./responder";
@@ -31,8 +33,8 @@ const RISK_KINDS: RiskKind[] = ["exit-approach", "night-wandering", "kitchen-nig
 const PATIENT_MODES: PatientMode[] = ["idle", "glow", "photo_voice", "greeting", "calm", "note"];
 
 // The caregiver's recordings (Settings). They play from the second reminder on; the first one says where they are
-// and the way back, which a fixed recording cannot (docs/cues.md).
-const VOICE_SLOT: Partial<Record<RiskKind, string>> = { "kitchen-night": "kitchen", "night-wandering": "bedtime", "exit-approach": "front-door" };
+// and the way back, which a fixed recording cannot (docs/cues.md). Typed lines (Settings) replace the words of a cue.
+const VOICE_SLOT: Partial<Record<RiskKind, VoiceSlot>> = { "kitchen-night": "kitchen", "night-wandering": "bedtime", "exit-approach": "front-door" };
 
 const GREETING_MS = 15_000; // how long the greeting stays before the routine comes back
 const GREET_AGAIN_MS = 10 * 60_000; // walking in and out of the TV room should not greet every time
@@ -65,6 +67,10 @@ const actions: MonitorModule = {
     // Each contact's phone for Twilio, or their ntfy topic when Twilio is not live (notify.ts).
     const primary = contactAddress(process.env.CAREGIVER_PHONE_NUMBER ?? "", process.env.NTFY_CAREGIVER_TOPIC, notify.live);
     const backup = contactAddress(process.env.BACKUP_PHONE_NUMBER ?? "", process.env.NTFY_BACKUP_TOPIC, notify.live);
+    const lines = createLines();
+    loadLines(householdId)
+      .then((saved) => saved && (lines.load(saved), ctx.log("actions", `${Object.keys(saved).length} typed voice lines`)))
+      .catch((e) => ctx.log("actions", "could not read typed voice lines:", (e as Error).message));
 
     // Deferred so a risk the engine raises reaches every listener before the responder's follow-up does.
     const later = <T>(fn: (x: T) => void) => (x: T) => queueMicrotask(() => fn(x));
@@ -105,6 +111,7 @@ const actions: MonitorModule = {
         const script = cueScript({ kind: risk.kind, name: HOUSEHOLD.patientName, home: ctx.world(), roomId: here.roomId, confident: here.confident, night: night() });
         return {
           ...script,
+          message: (slot && lines.get(slot)) || script.message,
           // The caregiver's chosen photo (Settings). /api/patient/media falls back to the scanned bedroom photo.
           photoPath: `${householdId}/redirect-photo.jpg`,
           voicePath: slot && cue >= 2 ? `${householdId}/redirect-${slot}.m4a` : undefined,
@@ -172,7 +179,7 @@ const actions: MonitorModule = {
       const greeting: PatientState = {
         householdId,
         mode: "greeting",
-        message: greetingLine(HOUSEHOLD.patientName, localMinutes(ts, HOUSEHOLD.timezone) / 60),
+        message: lines.get("greeting") || greetingLine(HOUSEHOLD.patientName, localMinutes(ts, HOUSEHOLD.timezone) / 60),
         voicePath: `${householdId}/greeting.m4a`,
         updatedAt: new Date().toISOString(),
       };
@@ -218,6 +225,14 @@ const actions: MonitorModule = {
     ctx.http.get("/alerts", () => {
       const { alerts, active } = responder.state();
       return { alerts: [...alerts].reverse(), active, profile: profileName, twilio: notify.live ? "live" : "dry run" };
+    });
+
+    // Settings saved new redirect words (app/api/patient/lines). Replaces the whole set.
+    // Saves for another home are ignored: this monitor serves one household.
+    ctx.http.post("/voice-lines", ({ body }) => {
+      const hid = field(body, "householdId");
+      if (hid !== undefined && hid !== householdId) return { ignored: true };
+      return { lines: lines.set(field(body, "lines")) };
     });
 
     ctx.http.post("/ack/:alertId", ({ params }) => {

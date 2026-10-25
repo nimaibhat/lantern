@@ -14,6 +14,7 @@ import type { LiveFrame, PatientMode, RiskKind, Room, RoutineStep } from "@/lib/
 import { companionEnabled, companionFromCue, startCompanion, warmMicrophone, type Companion } from "./companion";
 import { RoutinePlayer } from "./player";
 import { chime, hush, speak, unlockAudio } from "./sound";
+import { preloadVapi, sayCalmly } from "./vapi-voice";
 import "./patient.css";
 
 const MONITOR_WS = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
@@ -126,9 +127,16 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
     return true;
   };
 
-  // Words for the screen: the caregiver's recording when there is one, otherwise the calm browser voice.
+  // Words for the screen: the caregiver's recording when there is one, otherwise the calm Vapi voice (Layla), and
+  // the browser's own voice if Vapi is not set up or cannot connect.
+  const calmCall = useRef<AbortController | undefined>(undefined);
   const say = useCallback(async (words: string, voicePath?: string) => {
-    if (!voicePath) return speak(words, night);
+    if (!voicePath) {
+      calmCall.current?.abort();
+      const call = (calmCall.current = new AbortController());
+      if (await sayCalmly(words, call.signal)) return;
+      return speak(words, night);
+    }
     const audio = new Audio(media(voicePath));
     await new Promise<void>((resolve) => {
       audio.onended = () => resolve();
@@ -198,6 +206,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
     return () => {
       cancelled = true;
       hush();
+      calmCall.current?.abort(); // hangs up a Vapi line still speaking
     };
   }, [view.at, unlocked]); // once per arrival; the rest of `view` arrives with it
 
@@ -265,6 +274,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
           onClick={() => {
             unlockAudio();
             void warmMicrophone();
+            preloadVapi();
             if ("speechSynthesis" in window) speechSynthesis.getVoices(); // some browsers load voices on first ask
             setUnlocked(true);
           }}

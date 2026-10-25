@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { vapiConfigured } from "@/app/routine/vapi-voice";
+import { MAX_LINE_CHARS } from "@/lib/dashboard/redirect-media";
 
-// Familiar voice and photo for the TV redirect. A caregiver records each line in their own voice (or uploads a
-// clip) and picks the photo shown with it. Lines without a recording are read aloud by the TV instead.
+// Familiar voice and photo for the TV redirect. A caregiver types what the TV should say for each moment, and can
+// record it in their own voice (or upload a clip) and pick the photo shown with it. Typed lines without a recording
+// are spoken by the calm voice (Layla, through Vapi), or read aloud by the TV when Vapi is not set up.
 
-type Slot = { slot: string; label: string; when: string; line: string; url: string | null };
+type Slot = { slot: string; label: string; when: string; line: string; defaultLine: string; typed: boolean; url: string | null };
 type Media = { patientName: string; slots: Slot[]; photo: string | null };
 
 const MAX_SECONDS = 20;
@@ -19,6 +22,8 @@ export function RedirectMedia() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [recording, setRecording] = useState<{ slot: string; seconds: number } | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({}); // typed but not saved yet
+  const [note, setNote] = useState("");
   const recorder = useRef<MediaRecorder | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -83,6 +88,21 @@ export function RedirectMedia() {
     }
   }
 
+  // An empty line puts the slot back to the default words.
+  async function saveLine(slot: string, line: string) {
+    setBusy(`line-${slot}`);
+    setError("");
+    setNote("");
+    const r = await fetch("/api/patient/lines", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot, line }) });
+    const d = await r.json().catch(() => ({}));
+    setBusy(null);
+    if (!r.ok) return setError(d.error ?? "Could not save that line.");
+    setDrafts(({ [slot]: _, ...rest }) => rest);
+    // Saved either way; a monitor that is not running reads the saved lines when it starts.
+    if (!d.monitor) setNote("Saved. The monitor is not running right now; it will use the new words when it starts.");
+    await load();
+  }
+
   async function remove(kind: "voice" | "photo", slot?: string) {
     setBusy(slot ?? "photo");
     await fetch(`/api/patient/upload?kind=${kind}${slot ? `&slot=${slot}` : ""}`, { method: "DELETE" });
@@ -95,7 +115,9 @@ export function RedirectMedia() {
   return (
     <div className="media">
       <p className="muted">
-        When {media.patientName} gets up at night, the TV glows, then shows this photo and plays your voice. Record each line the way you would say it at home. Lines without a recording are read aloud by the TV.
+        When {media.patientName} gets up at night, the TV glows, then shows this photo and says the line below. Type
+        each line the way you would say it at home: short, warm and simple.{" "}
+        {vapiConfigured ? "The TV speaks it in a calm voice," : "The TV reads it aloud,"} or record it yourself and your recording plays instead.
       </p>
 
       <div className="media-photo">
@@ -133,15 +155,37 @@ export function RedirectMedia() {
       <ul className="media-list">
         {media.slots.map((s) => {
           const isRec = recording?.slot === s.slot;
+          const draft = drafts[s.slot];
+          const text = draft ?? s.line;
+          const saving = busy === `line-${s.slot}`;
           return (
             <li key={s.slot} className="media-row">
               <div className="media-text">
                 <div className="audit-title">
                   <strong>{s.label}</strong>
-                  <span className={`badge ${s.url ? "resolved" : ""}`}>{s.url ? "your voice" : "read aloud"}</span>
+                  <span className={`badge ${s.url ? "resolved" : ""}`}>{s.url ? "your voice" : vapiConfigured ? "calm voice" : "read aloud"}</span>
                 </div>
                 <span className="muted small">{s.when}</span>
-                <span className="media-line">“{s.line}”</span>
+                <textarea
+                  rows={2}
+                  maxLength={MAX_LINE_CHARS}
+                  value={text}
+                  aria-label={`What the TV says: ${s.label}`}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [s.slot]: e.target.value }))}
+                />
+                <div className="media-edit">
+                  {draft !== undefined && draft.trim() !== s.line && (
+                    <button className="btn small" onClick={() => saveLine(s.slot, draft)} disabled={saving || !draft.trim()}>
+                      {saving ? "Saving..." : "Save line"}
+                    </button>
+                  )}
+                  {s.typed && draft === undefined && (
+                    <button className="btn small ghost" onClick={() => saveLine(s.slot, "")} disabled={saving}>
+                      Use the default
+                    </button>
+                  )}
+                  {s.url && <span className="muted small">Your recording plays instead of the typed words.</span>}
+                </div>
               </div>
               <div className="media-actions">
                 {s.url && <audio controls src={s.url} preload="none" />}
@@ -166,6 +210,7 @@ export function RedirectMedia() {
           );
         })}
       </ul>
+      {note && <p className="muted small">{note}</p>}
       {error && <p className="error">{error}</p>}
     </div>
   );

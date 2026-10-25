@@ -7,11 +7,13 @@ import {
   VOICE_SLOTS,
   voicePath,
 } from "@/lib/dashboard/redirect-media";
+import { readLines } from "@/lib/dashboard/voice-lines";
 import { currentHouseholdId, isReadOnly, READ_ONLY_MESSAGE } from "@/lib/households";
 import { db } from "@/lib/supabase/server";
 
 // The caregiver's familiar voice lines and the redirect photo for the TV screen.
-// GET                                   -> { patientName, slots: [{ slot, label, when, line, url }], photo: url | null }
+// GET                                   -> { patientName, slots: [{ slot, label, when, line, defaultLine, typed, url }], photo: url | null }
+//                                          (typed lines are saved by /api/patient/lines)
 // POST  form: kind=voice, slot, file    -> stores the recording in that slot
 // POST  form: kind=photo, file          -> stores the redirect photo
 // DELETE ?kind=voice&slot=... | ?kind=photo
@@ -27,8 +29,17 @@ async function signed(bucket: string, path: string): Promise<string | null> {
 export async function GET() {
   if (!db) return Response.json({ error: "Supabase is not configured." }, { status: 503 });
   const [{ patientName }, hid] = await Promise.all([getHousehold(), currentHouseholdId()]);
+  const typed = await readLines(hid);
   const slots = await Promise.all(
-    VOICE_SLOTS.map(async (v) => ({ slot: v.slot, label: v.label, when: v.when, line: v.line(patientName), url: await signed("voice", voicePath(hid, v.slot)) })),
+    VOICE_SLOTS.map(async (v) => ({
+      slot: v.slot,
+      label: v.label,
+      when: v.when,
+      line: typed[v.slot] ?? v.line(patientName),
+      defaultLine: v.line(patientName),
+      typed: !!typed[v.slot],
+      url: await signed("voice", voicePath(hid, v.slot)),
+    })),
   );
   return Response.json({ patientName, slots, photo: await signed("photos", redirectPhotoPath(hid)) });
 }
