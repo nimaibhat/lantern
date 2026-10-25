@@ -1,19 +1,28 @@
 # Lantern status and plan
 
-Checked on 2026-10-23 against `PROJECT_PLAN.md`. Update this file when an item moves.
+Checked on 2026-10-25 against the code on `main`. Update this file when an item moves.
 
 ## Where things stand
 
-- `main` holds everything: the four feature branches were merged and deleted upstream.
-- `npm run typecheck` is clean, `npm test` passes (124 tests), `npm run build` passes (28 routes).
-- **Simulated loop works end to end.** Mock listeners > 1 s frames > kNN + door-graph HMM > `location` and
-  `prediction` > `kitchen-night` risk at 3 AM > TV glow, then photo and voice > resolved when the person walks back,
-  with no message. Staying put sends the SMS at 30 s and the call at 75 s (demo timers, dry run); acknowledging
-  stops it.
-- **Every page was driven in a browser** at desktop and phone width (landing, all dashboard pages, rooms, the TV
-  page): no console errors, no failed requests other than the expected missing redirect photo, no overflow.
-- **Not yet proven with real hardware.** The tag, the laptop listeners and the classifier have not been run together
-  in a real space, and the classifier is trained on simulated readings only (the Models page says so).
+- `npm test` passes (232 tests). `npm run typecheck` fails on one line: `app/routine/vapi-voice.ts:104` passes
+  `microphonePreflightEnabled`, which the installed Vapi SDK's `StartCallOptions` does not have.
+- **The Roku TV is dropped** (2026-10-24). The patient screen is `/routine?room=<room id>`, fullscreen on a tablet
+  or laptop in the room. Some UI copy still says "TV" (Settings > redirect media, the overview's "Say something on
+  the TV", the `TV (simulated)` label on the patient screen).
+- **Room laptops join from the Tracking page.** They post to the hub's `/api/tracking`, which saves to Supabase, and
+  the monitor relays every laptop's newest reading in (`monitor/sensing/relay.ts`, off with `SUPABASE_RELAY=0`). So
+  the dot, the risk rules, the cues and the alerts all run on Tracking-page laptops. The Python listeners still
+  report to the monitor directly.
+- **Positioning.** The dot goes on the walking route between the two nearest sensors (`monitor/inference/between.ts`,
+  the default). The room comes from the floor grid when no kNN model fits the home, which is the case for any
+  freshly scanned home: the saved kNN model was trained on simulated readings for the fixture home. The door-graph
+  HMM smooths the room; the Markov predictor guesses the next one. `ROOM_FROM=closest` instead takes the room from
+  the laptop that hears the phone best, and that laptop also says the bedtime line.
+- **Settings save.** Household, quiet hours and zone rules are saved to Supabase, and the monitor loads them on
+  start. Typed redirect lines go to Storage and are pushed to a running monitor.
+- **Alerts:** ntfy push with an Acknowledge button (no tunnel needed), Twilio text and call, Vapi calls. Each is a
+  dry run or off until its keys are set on the machine running the monitor.
+- The items below the 2026-10-23 pass were not rechecked in this pass unless marked.
 
 ## Done in the 2026-10-23 pass
 
@@ -45,18 +54,18 @@ Checked on 2026-10-23 against `PROJECT_PLAN.md`. Update this file when an item m
 | 5 | Pick the demo listener set. The home model has a `living-room` anchor from a two-laptop test that nothing else uses (it reads offline on the World view, and the model was trained with it); update anchors in the zone editor, then retrain | Saran, Nimai, Vineet |
 | 6 | Align room ids: scanned rooms are `living` and `entry`, the home model says `tv-room` and `front-door`. The overview maps them now; rename in the data (via the Supabase MCP) or rescan with matching names | Nimai, Aarnav |
 | 7 | `.env.local` has live Twilio keys and no `TWILIO_DRY_RUN`: a night-time test texts and calls real phones. Keep `TWILIO_DRY_RUN=1` except during the real demo | everyone |
-| 8 | The TV redirect shows the message with no photo: no redirect photo has been uploaded and no scanned room has photos (`rooms.photo_paths` are empty). Upload one in Settings > Familiar voice and photo, and record the voice clips | Aarnav |
+| 8 | The patient screen redirect shows the message with no photo: no redirect photo has been uploaded and no scanned room has photos (`rooms.photo_paths` are empty). Upload one in Settings > Familiar voice and photo, and record the voice clips | Aarnav |
 | 9 | Record the backup video of the full loop as soon as the real run works | Saran |
 
 ## Should do
 
-- Settings looks editable but saves nothing (household name, patient, quiet hours), and the monitor uses its own
+- **Done 2026-10-25:** Settings and zone rules now save to Supabase and the monitor loads them. Was: Settings looks editable but saves nothing (household name, patient, quiet hours), and the monitor uses its own
   copy of the household and zone rules in `monitor/actions/index.ts` instead of Supabase. The database and that
   copy agree today (h1, quiet 21:00 to 07:00, same four rules). Next: save Settings to Supabase, have the monitor
   load the household and `zone_rules` on start and on a reload call, and let Settings edit zone rules and the
   escalation profile (plan Part 6 step 8). Until then `DEMO_HOUR=3` is how an afternoon demo gets night rules.
   Aarnav.
-- Roku status on the overview. Aarnav.
+- ~~Roku status on the overview~~ (the Roku is dropped).
 - `/analytics/summary` lives in memory and resets when the monitor restarts; persist outcomes (schema change through the Supabase MCP). Aarnav.
 - Bathroom and front door are confused about 1 time in 4 on simulated data because neither has a listener of its
   own; weigh that when placing the real listeners (item 5). Vineet, Saran.

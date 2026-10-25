@@ -9,7 +9,7 @@ Dementia home safety, built on one scan of the real home. One LiDAR scan (Apple 
 1. **Hazard audit**: Claude vision on room photos flags rugs, cords, clutter, stairs without rails.
 2. **Accessibility audit**: rules on scan measurements (door widths, hallway widths, turning space) produce a report an occupational therapist can review.
 3. **Familiar routine**: a step-by-step daily guide built from real photos of the patient's rooms.
-4. **Home monitor**: BLE room location (ESP32s + beacon), risky-movement rules, a calm redirect (light + familiar voice), then caregiver escalation (Twilio).
+4. **Home monitor**: BLE room location (room laptops hearing a phone tag), risky-movement rules, a calm redirect (light + familiar voice) on a screen in the room, then caregiver escalation (ntfy, Twilio, Vapi).
 
 A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, timeline, and owners.
 
@@ -24,10 +24,10 @@ A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, 
 - **Web**: Next.js (App Router) + TypeScript + React, plain CSS with custom properties. No Tailwind or UI kits unless the team agrees.
 - **Data**: Supabase (Postgres, Storage, Realtime, Auth).
 - **iOS**: SwiftUI + RoomPlan. Exports `CapturedRoom` JSON + USDZ and uploads to Supabase Storage.
-- **Hardware**: ESP32s (Arduino) scanning a Blue Charm BC011 beacon, sending RSSI over MQTT or HTTP.
-- **ML**: room classifier on RSSI vectors (kNN or random forest). Python is fine for training; keep inference simple.
+- **Hardware**: room laptops hear the iPhone app's Tag tab over Bluetooth (Chrome Web Bluetooth or a small Python scanner via the Tracking page, or `listener/`) and send RSSI over HTTP or WebSocket.
+- **ML**: kNN room classifier on RSSI vectors when a model fits the home, else the floor grid; door-graph HMM and a Markov next-room predictor. Python is fine for training; keep inference simple.
 - **AI**: Anthropic API (Claude vision for hazards). Use the latest Claude model.
-- **Alerts**: Twilio SMS and voice.
+- **Alerts**: ntfy push, Twilio SMS and voice, Vapi calls.
 - **Stretch**: World Labs Marble preview, Gaussian splats.
 
 ## Layout
@@ -36,7 +36,7 @@ A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, 
 app/                 Next.js routes (landing page at /, dashboard at /dashboard)
 app/api/             server routes (scan upload, world model, tracking, sensors, live bridge, alerts)
 app/dashboard/       one folder per page; shared shell, nav, overview and styles in _components/
-app/routine/         the patient's TV: Now and Next, chime and calm voice, cues, Vapi companion
+app/routine/         the patient screen (tablet or laptop): Now and Next, chime and calm voice, cues, Vapi companion
 app/signs/           printable door signs from the scanned rooms
 lib/types/           type contracts split by module (world, sensing, inference, actions, live, bus)
 lib/cues/            what Lantern says: cue wording, family texts, Vapi agents, routine prompts (docs/cues.md)
@@ -55,7 +55,7 @@ monitor/             Node service: HTTP + WS server, module host
 monitor/world/       serves the newest home model, routes through doors
 monitor/sensing/     listener ingest, Supabase relay (Tracking laptops on other hubs), RssiWindow, SensorFrame, simulator
 monitor/inference/   room classifier, door-graph HMM, position, predictor
-monitor/actions/     risk engine, responder (grace, repeating cues), Twilio, Vapi calls, time away, TV
+monitor/actions/     risk engine, responder (grace, repeating cues), ntfy, Twilio, Vapi calls, time away, patient screen
 tools/               dev helpers (mock-rssi, mock-walk, replay, check-env, find-roku, calibrate-offsets, position-eval, position-lag)
 docs/                runbook, project status, spike notes, cues (cues.md), Vapi setup (vapi.md)
 ml/                  RSSI training scripts and saved model
