@@ -57,12 +57,16 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
     if (error) setPlaceNote(error);
   }
 
-  // One list of sensors, whoever registered them: the monitor's listeners and placements, plus Tracking laptops that
-  // reported recently. Named the way Tracking names them, standing in the room their placement falls in.
+  // One list of sensors, whoever registered them: listeners the monitor has heard, Tracking laptops that reported
+  // recently, and placed sensors that one of those knows. A placement nobody registered or heard (a removed laptop,
+  // a simulator listener) stays off the list. Named the way Tracking names them.
   const sensors = useMemo(() => {
     const saved = new Map(registered.map((r) => [r.id, r]));
+    // The monitor lists every placed listener, offline until heard, so only the ones online count as heard
+    const heard = Object.keys(listeners).filter((id) => listeners[id]);
+    const known = (id: string) => !!listeners[id] || saved.has(id);
     const ids = connected
-      ? new Set([...Object.keys(listeners), ...placed.map((p) => p.receiverId), ...registered.filter((r) => r.online).map((r) => r.id)])
+      ? new Set([...heard, ...registered.filter((r) => r.online).map((r) => r.id), ...placed.map((p) => p.receiverId).filter(known)])
       : new Set(registered.map((r) => r.id));
     return [...ids]
       .map((id) => {

@@ -132,7 +132,7 @@ export async function GET() {
   }
   const { data } = await db.from("receivers").select("id, label, room_id, last_rssi, last_rssi_at, last_seen_at").eq("household_id", HOUSEHOLD_ID);
   // the monitor stands each laptop that reported in the last 5 min in its room
-  void syncPlacements((data ?? []).map((r) => ({ id: r.id as string, label: r.label as string | null, room_id: r.room_id as string | null, online: !!r.last_seen_at && Date.now() - Date.parse(r.last_seen_at as string) < 5 * 60_000 })));
+  if (data) void syncPlacements(data.map((r) => ({ id: r.id as string, label: r.label as string | null, room_id: r.room_id as string | null, online: !!r.last_seen_at && Date.now() - Date.parse(r.last_seen_at as string) < 5 * 60_000 })), { all: true });
   const latest = new Map<string, { rssi: number; at: number }>();
   for (const row of data ?? []) {
     if (typeof row.last_rssi !== "number" || !row.last_rssi_at) continue;
@@ -291,7 +291,7 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
     console.error("Could not save a laptop:", error.message);
     return Response.json({ error: "Could not save that device." }, { status: 500 });
   }
-  void syncPlacements([{ id: receiverId, label, room_id: null, online: true }], true);
+  void syncPlacements([{ id: receiverId, label, room_id: null, online: true }], { force: true });
   const clientProtocol = body.protocol === "https:" || body.protocol === "http:" ? body.protocol : undefined;
   const listening = body.listen && body.hub && requestFromHub(request) ? await listenHere(receiverId, !!body.replace, earPostUrl(request, clientProtocol)) : false;
   return Response.json({ ok: true, deviceId: receiverId, label, listening });

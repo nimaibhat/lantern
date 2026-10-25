@@ -190,6 +190,10 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           const frame = JSON.parse(e.data);
           if (frame.t !== "listener") return;
           if (browserIds.current.has(frame.receiverId)) return;
+          // Laptops report here and this server hands their readings on to the monitor. The monitor's copy is
+          // smoothed over a few seconds and says -100 until it has enough of them, so it must not override the
+          // signal this page already gets from /api/tracking.
+          if (/^ear-/.test(frame.receiverId)) return;
           setReadings((prev) => ({
             ...prev,
             [frame.receiverId]: {
@@ -450,6 +454,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
           const id = deviceIdRef.current;
+          setLaunchId(id);
           setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Chrome cannot access Bluetooth on this Mac. Copy the command below, paste it in Terminal, and leave it running.");
           return;
@@ -474,6 +479,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           }
           // Web Bluetooth paired but no signal — offer Terminal command
           const id = deviceIdRef.current;
+          setLaunchId(id);
           setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Chrome paired but the signal isn't coming through. Copy the command below and paste it in Terminal.");
           return;
@@ -483,6 +489,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
           const id = deviceIdRef.current;
+          setLaunchId(id);
           setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Copy the command below and paste it in Terminal. It will install what it needs and start listening.");
         }
@@ -512,6 +519,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
         if (!saved) return;
         const id = deviceIdRef.current;
         const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+        setLaunchId(id);
         setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
         setNote("This browser does not support Bluetooth. Open PowerShell on this laptop, paste the command below, and leave it running.");
         return;
@@ -537,6 +545,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           // Web Bluetooth isn't delivering signal — offer PowerShell command
           const id = deviceIdRef.current;
           const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+          setLaunchId(id);
           setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
           setNote("Chrome paired but can't read the signal on this laptop. Open PowerShell, paste the command below, and leave it running.");
           return;
@@ -548,6 +557,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
         if (!saved) return;
         const id = deviceIdRef.current;
         const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+        setLaunchId(id);
         setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
         setNote("Open PowerShell on this laptop, paste the command below, and leave it running. It will scan Bluetooth and send the signal to the hub.");
       }
@@ -610,7 +620,9 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
   const cards = placed
     .filter((p) => !/^r\d+$/.test(p.id))
     .map((p) => ({ ...p, reading: readings[p.id], label: labels[p.id] ?? p.id }))
-    .sort((a, b) => (b.reading?.rssi ?? -100) - (a.reading?.rssi ?? -100));
+    // A steady order: cards that re-sort by signal every second slide under the pointer, and a room picked for one
+    // laptop lands on another. The closest one is still marked.
+    .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
 
   const heardCards = cards.filter((c) => c.reading?.online && (c.reading?.rssi ?? -100) > -100);
   const lead = heardCards.find((c) => c.id === call?.receiverId);
@@ -754,6 +766,13 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
             wordBreak: "break-all",
             userSelect: "all",
           }}>{termCmd}</code>
+          {launchId && (
+            <p className="muted" style={{ margin: "0.5rem 0" }}>
+              Or download{" "}
+              <a href={`/api/tracking/launch?id=${launchId}`}>{laptopKind() === "mac" ? "Lantern.command" : "Lantern.bat"}</a>
+              {" "}and double-click it. If Chrome asks, choose Keep.
+            </p>
+          )}
           <button
             className="btn small"
             style={{ marginTop: "0.4rem" }}

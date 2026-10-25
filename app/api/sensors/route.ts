@@ -3,7 +3,7 @@
 // sets where one stands, by room or by its exact spot on the plan, in both places at once.
 
 import { getReceivers } from "@/lib/dashboard/data";
-import { currentHouseholdId, isReadOnly, READ_ONLY_MESSAGE } from "@/lib/households";
+import { currentHouseholdId, DEMO_HOUSEHOLD_ID, isReadOnly, READ_ONLY_MESSAGE } from "@/lib/households";
 import { placeReceiver, syncPlacements } from "@/lib/sensing/monitor-sync";
 import { db } from "@/lib/supabase/server";
 
@@ -13,7 +13,9 @@ const ID = /^[\w.:-]{1,64}$/;
 
 export async function GET() {
   const receivers = await getReceivers();
-  void syncPlacements(receivers.map((r) => ({ id: r.id, label: r.label, room_id: r.roomId || null, online: r.online })));
+  // The monitor watches the demo home only; another home's devices must not land on its plan
+  if ((await currentHouseholdId()) === DEMO_HOUSEHOLD_ID)
+    void syncPlacements(receivers.map((r) => ({ id: r.id, label: r.label, room_id: r.roomId || null, online: r.online })), { all: true });
   return Response.json({ receivers });
 }
 
@@ -27,13 +29,15 @@ export async function POST(request: Request) {
   if (!roomId && !position) return Response.json({ error: "Pick a room or a spot on the plan." }, { status: 400 });
   const household = await currentHouseholdId();
   if (isReadOnly(household)) return Response.json({ error: READ_ONLY_MESSAGE }, { status: 403 });
+  if (household !== DEMO_HOUSEHOLD_ID) return Response.json({ error: "Live tracking runs in the demo home for now." }, { status: 409 });
 
   const placed = await placeReceiver(receiverId, { roomId, position });
   if (!placed.ok) return Response.json({ error: placed.error }, { status: 502 });
 
   // Saved with the device too, so Tracking and a restarted monitor agree. Devices that only ever reported to the
   // monitor (a listener script, the simulator) have no row, and that is fine.
-  const room = placed.roomId ?? roomId;
+  // The room the caregiver picked wins; a pinned spot is saved with the room it falls in
+  const room = roomId ?? placed.roomId;
   if (db && room) {
     const { error } = await db.from("receivers").update({ room_id: room }).eq("id", receiverId).eq("household_id", household);
     if (error) console.error("Could not save where a device stands:", error.message);

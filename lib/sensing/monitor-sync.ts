@@ -21,7 +21,9 @@ async function world(): Promise<MonitorWorld | undefined> {
 
 // The monitor's room for a Supabase room id, or failing that a name ("Kitchen", "Kitchen device").
 const roomFor = (w: MonitorWorld, roomId?: string | null, name?: string | null) =>
-  (roomId && w.rooms.find((x) => x.id === roomId)) || (name ? roomNamed(w.rooms, name) ?? roomNamed(w.rooms, name.replace(/\s+device$/i, "")) : undefined);
+  (roomId && w.rooms.find((x) => x.id === roomId)) || (name ? roomNamed(w.rooms, name) : undefined);
+
+const TRACKING_ID = /^ear-[a-f0-9]{8}$/;
 
 // One reading, as it arrives, under the laptop's own id.
 export function forwardReading(receiverId: string, rssi: number) {
@@ -57,9 +59,13 @@ export async function placeReceiver(receiverId: string, where: { roomId?: string
 
 // Every laptop placed in a room, or named after one ("Kitchen"), stands in that room for the monitor too. Laptops the
 // monitor already has, perhaps pinned to their exact spot, are left alone, and so are rows nothing has reported from
-// lately (online false), so an old device does not end up on the plan. At most every 20 s unless forced (a laptop
-// just joined).
-export async function syncPlacements(receivers: { id: string; label?: string | null; room_id?: string | null; online?: boolean }[], force = false) {
+// lately (online false), so an old device does not end up on the plan. With every laptop of the home (all), one the
+// monitor still places but Tracking no longer has (removed, perhaps from another laptop's hub) is taken off the plan.
+// At most every 20 s unless forced (a laptop just joined).
+export async function syncPlacements(
+  receivers: { id: string; label?: string | null; room_id?: string | null; online?: boolean }[],
+  { force = false, all = false }: { force?: boolean; all?: boolean } = {},
+) {
   const g = globalThis as typeof globalThis & { __lanternPlaceSync?: number };
   if (!force && Date.now() - (g.__lanternPlaceSync ?? 0) < SYNC_MS) return;
   g.__lanternPlaceSync = Date.now();
@@ -67,6 +73,10 @@ export async function syncPlacements(receivers: { id: string; label?: string | n
     const w = await world();
     if (!w) return;
     const placed = new Set(w.anchors.map((a) => a.receiverId));
+    if (all) {
+      const kept = new Set(receivers.map((r) => r.id));
+      for (const id of placed) if (TRACKING_ID.test(id) && !kept.has(id)) await post("/world/unassign", { receiverId: id }).catch(() => {});
+    }
     for (const r of receivers) {
       if (placed.has(r.id) || r.online === false) continue;
       const room = roomFor(w, r.room_id, r.label);

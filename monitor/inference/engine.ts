@@ -53,6 +53,7 @@ export function namedAnchors(home: HomeModel, ids: Iterable<string>): Anchor[] {
 
 const STALE_MS = 5000; // tag not heard for this long: stop moving the avatar
 const GAP_MS = 15000; // tag silent this long: the person could be anywhere when it comes back
+const CONFIRM_MS = 1500; // the live dot stays in a new room this long before alerts and cues are told
 
 export class InferenceEngine {
   private hmm!: RoomHmm;
@@ -69,6 +70,12 @@ export class InferenceEngine {
   private exits: Record<string, number> = {};
   private lastHeardTs = 0;
   private seq = 0;
+  // One room for everything downstream. While the live dot runs, alerts, cues, the greeting and dwell hear the room
+  // it stands in (once it has stayed there a moment), so they never disagree with the plan; otherwise the tracker.
+  private said?: string;
+  private moving?: { room: string; since: number };
+  private followedAt = 0;
+  private pending: InferenceEvent[] = [];
   private last: { frame?: SensorFrame; posterior?: Record<string, number>; belief?: Record<string, number>; raw?: Vec2; prediction?: Prediction } = {};
 
   private base!: HomeModel; // the home as loaded; `home` adds listeners placed by their names
@@ -93,7 +100,10 @@ export class InferenceEngine {
     const fast = this.opts.live === false ? undefined : new FastPositioner(home, this.opts.live);
     this.fast = fast?.ready ? fast : undefined;
     this.fitModels();
+    // A sensor placed or moved is a new home model, not a move: alerts keep the room they were told, if it is still here
+    const said = this.said;
     this.restart();
+    if (said && this.roomIds.includes(said)) this.said = said;
   }
 
   // Forget where the person was: after a home model change, or when the tag comes back from a long silence
@@ -104,6 +114,9 @@ export class InferenceEngine {
     this.floor?.reset();
     this.fast?.reset();
     this.spreadIn = undefined;
+    this.said = undefined;
+    this.moving = undefined;
+    this.followedAt = 0;
   }
 
   setModels(models: Models) {
@@ -166,28 +179,60 @@ export class InferenceEngine {
     if (!change) return [];
 
     if (change.prev) this.pos.enterRoom(routeBetween(this.home, change.prev, change.room).slice(1, -1)); // door centers
+    // The live dot is running: what it says goes out from tick (follow), this tracker only steers the grid
+    if ((this.followedAt && f.ts - this.followedAt <= STALE_MS) || change.room === this.said) return [];
+    const prev = this.said ?? change.prev;
+    this.said = change.room;
+    return this.roomEvents(f.ts, change.room, prev, change.confidence);
+  }
+
+  // A room change for everything downstream, and where the person is likely to go next
+  private roomEvents(ts: number, room: string, prev: string | undefined, confidence: number): InferenceEvent[] {
     const events: InferenceEvent[] = [{
       k: "location",
       d: {
-        id: this.opts.newId?.() ?? `loc-${f.ts}-${this.seq++}`,
+        id: this.opts.newId?.() ?? `loc-${ts}-${this.seq++}`,
         householdId: this.home.householdId,
-        roomId: change.room,
-        prevRoomId: change.prev,
-        confidence: round(change.confidence, 3),
+        roomId: room,
+        prevRoomId: prev,
+        confidence: round(confidence, 3),
         source: this.opts.source ?? "ble",
-        ts: new Date(f.ts).toISOString(),
+        ts: new Date(ts).toISOString(),
       },
     }];
 
     // A room with one way out (bedroom > hallway) has nothing worth predicting
-    const markov = this.exits[change.room] > 1 ? this.models.markov : undefined;
-    const hour = (this.opts.hourOf ?? localHour)(f.ts);
-    const next = markov && predictNext(markov, change.prev, change.room, hour);
+    const markov = this.exits[room] > 1 ? this.models.markov : undefined;
+    const hour = (this.opts.hourOf ?? localHour)(ts);
+    const next = markov && predictNext(markov, prev, room, hour);
     if (next && next.probability >= (this.opts.minPrediction ?? 0.5)) {
-      const d = { ts: f.ts, fromRoomId: change.room, nextRoomId: next.nextRoomId, probability: round(next.probability, 3) };
+      const d = { ts, fromRoomId: room, nextRoomId: next.nextRoomId, probability: round(next.probability, 3) };
       this.last.prediction = d;
       events.push({ k: "prediction", d });
     }
+    return events;
+  }
+
+  // The live dot's room: told downstream once the dot has stayed in it CONFIRM_MS, so a brush past a doorway is not
+  // a room change. Brief walks through a room on the way somewhere else are not told either.
+  private follow(ts: number, room: string, confidence: number) {
+    this.followedAt = ts;
+    if (room === this.said) {
+      this.moving = undefined;
+      return;
+    }
+    if (this.moving?.room !== room) this.moving = { room, since: ts };
+    if (ts - this.moving.since < CONFIRM_MS) return;
+    const prev = this.said;
+    this.said = room;
+    this.moving = undefined;
+    this.pending.push(...this.roomEvents(ts, room, prev, confidence));
+  }
+
+  // Room changes from the live dot since the last call, for the bus
+  drain(): InferenceEvent[] {
+    const events = this.pending;
+    this.pending = [];
     return events;
   }
 
@@ -200,6 +245,7 @@ export class InferenceEngine {
       // The fast path learns this home's walls; the frame grid uses what it learned
       if (this.floor && this.floor.wallDb !== this.fast.wallDb) this.floor.setWallDb(this.fast.wallDb);
       // Never had a fix (no listener with a known position hears the tag): fall through to the frame path below
+      if (e) this.follow(ts, e.room, e.share);
       if (e) return {
         ts, x: round(e.x, 1), y: round(e.y, 1), roomId: e.room, confidence: round(e.share, 3),
         source: this.opts.source ?? "ble", velocity: { x: round(e.velocity.x, 1), y: round(e.velocity.y, 1) }, spreadIn: Math.round(e.spreadIn),
@@ -219,7 +265,7 @@ export class InferenceEngine {
     };
   }
 
-  get room() { return this.rooms.room; }
+  get room() { return this.said ?? this.rooms.room; }
 
   // The floor grid's likely cells, for the plan's cloud. Empty with the centroid positioner.
   cloud() {

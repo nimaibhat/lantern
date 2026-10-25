@@ -8,7 +8,7 @@ export { originFor };
 
 function pyScript(deviceId: string, postUrl: string): string {
   return `
-import asyncio, json, ssl, sys, urllib.request, time
+import asyncio, json, ssl, sys, urllib.error, urllib.request, time
 
 DEVICE_ID = "${deviceId}"
 POST_URL  = "${postUrl}"
@@ -61,6 +61,8 @@ async def main():
             req = urllib.request.Request(POST_URL, data=body, headers={"Content-Type":"application/json"})
             try:
                 urllib.request.urlopen(req, context=ctx, timeout=2)
+            except urllib.error.HTTPError as e:
+                print("Lantern does not know this laptop anymore. Open Tracking and press Pair again." if e.code == 404 else "The hub could not take the signal.", flush=True)
             except Exception:
                 print("Could not reach the hub.", flush=True)
     except KeyboardInterrupt:

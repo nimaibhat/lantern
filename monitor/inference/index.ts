@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { localMinutes } from "../actions/risk";
 import type { MonitorModule } from "../module";
-import { InferenceEngine, type Models } from "./engine";
+import { InferenceEngine, type InferenceEvent, type Models } from "./engine";
 
 const TICK_MS = 100; // the fast dot steps ten times a second (inference/fast.ts)
 
@@ -39,26 +39,29 @@ const inference: MonitorModule = {
 
     ctx.bus.on("reading", (r) => engine.onReading(r));
 
+    const send = (e: InferenceEvent) => {
+      if (e.k === "location") {
+        ctx.log("loc", `${e.d.prevRoomId ?? "-"} > ${e.d.roomId} (${e.d.confidence})`);
+        ctx.bus.emit("location", e.d);
+      } else {
+        ctx.log("predict", `${e.d.fromRoomId} > ${e.d.nextRoomId} ${e.d.probability}`);
+        ctx.bus.emit("prediction", e.d);
+      }
+    };
+
     ctx.bus.on("frame", (f) => {
       if (ctx.world().version !== home.version) { // the home model was reloaded: rebuild the door graph
         home = ctx.world();
         engine.setHome(home);
       }
-      for (const e of engine.onFrame(f)) {
-        if (e.k === "location") {
-          ctx.log("loc", `${e.d.prevRoomId ?? "-"} > ${e.d.roomId} (${e.d.confidence})`);
-          ctx.bus.emit("location", e.d);
-        } else {
-          ctx.log("predict", `${e.d.fromRoomId} > ${e.d.nextRoomId} ${e.d.probability}`);
-          ctx.bus.emit("prediction", e.d);
-        }
-      }
+      engine.onFrame(f).forEach(send);
     });
 
     // unref: the HTTP server keeps the monitor alive; this timer alone must not (tests, shutdown)
     setInterval(() => {
       const p = engine.tick(Date.now());
       if (p) ctx.bus.emit("position", p);
+      engine.drain().forEach(send); // room changes the live dot settled on
     }, TICK_MS).unref();
 
     ctx.http.post("/model/reload", () => {

@@ -112,7 +112,12 @@ while ($null -ne $delegate) {
   if (-not $paired) { $paired = $true; Write-Output "Paired with LanternTag." }
   $body = '{"action":"hear","deviceId":"' + $deviceId + '","rssi":' + [int][LanternEar]::Rssi + '}'
   try { Invoke-RestMethod -Uri $post -Method Post -Body $body -ContentType "application/json" | Out-Null }
-  catch { Write-Output "Could not reach the hub." }
+  catch {
+    $code = 0
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    if ($code -eq 404) { Write-Output "Lantern does not know this laptop anymore. Open Tracking and press Pair again." }
+    else { Write-Output "Could not reach the hub." }
+  }
 }
 $watcher.remove_Received($token) | Out-Null
 `.trim();

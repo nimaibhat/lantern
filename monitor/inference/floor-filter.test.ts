@@ -76,6 +76,35 @@ test("the engine draws the fast dot from live readings, with how sure it is", ()
   assert.equal(typeof pos.spreadIn, "number");
 });
 
+test("alerts and cues hear the room the live dot is in, once it has stayed there a moment", () => {
+  const engine = new InferenceEngine(home, {}, { hourOf: () => 12 });
+  const t0 = 2_000_000, said: string[] = [];
+  const walk = (p: Vec2, from: number, to: number) => {
+    for (let t = from; t <= to; t += 100) {
+      heard(p).forEach((rssi, i) => engine.onReading({ receiverId: order[i], rssi, ts: t0 + t }));
+      if (t % 1000 === 0) {
+        const fromFrames = engine.onFrame({ ts: t0 + t, order, rssi: heard(p), online }).filter((e) => e.k === "location");
+        if (t >= 1000) assert.deepEqual(fromFrames, [], "the frame tracker stays quiet while the live dot runs");
+      }
+      engine.tick(t0 + t + 50);
+      for (const e of engine.drain()) if (e.k === "location") said.push(e.d.roomId);
+    }
+  };
+  walk({ x: 300, y: 72 }, 0, 4000);
+  assert.deepEqual(said, ["kitchen"]);
+  walk({ x: 320, y: 240 }, 4100, 10000);
+  assert.equal(said.at(-1), "tv-room");
+  assert.equal(engine.tick(t0 + 10050)?.roomId, "tv-room", "the plan and the cues agree");
+  assert.equal(engine.room, "tv-room");
+
+  // A sensor placed while they sit there rebuilds the home model; that is not a move, so nothing new is said
+  const before = said.length;
+  engine.setHome({ ...home, version: home.version + 1 });
+  walk({ x: 320, y: 240 }, 10100, 14000);
+  assert.equal(said.length, before, `said ${said.slice(before).join(", ")}`);
+  assert.equal(engine.room, "tv-room");
+});
+
 test("a model trained on another home hands the room decision to the floor grid", () => {
   const elsewhere: KnnModel = { kind: "knn", algo: "knn", k: 3, order: ["den", "porch"], rooms: ["den", "porch"], vectors: [[-50, -80], [-80, -50]], labels: ["den", "porch"] };
   const engine = new InferenceEngine(home, { knn: elsewhere }, { hourOf: () => 12, live: false });
