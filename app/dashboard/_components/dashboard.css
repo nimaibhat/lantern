@@ -413,15 +413,15 @@ body:has(.dash) {
 
 .sensor-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 2.8em;
+  grid-template-columns: minmax(0, 1fr) auto auto 3.4em;
   align-items: center;
   gap: 10px;
 }
 
-.sensor-list.editing li { grid-template-columns: minmax(0, 1fr) auto auto 2.8em auto; }
+.sensor-list.editing li { grid-template-columns: minmax(0, 1fr) auto auto 3.4em auto; }
 
 .sensor-list li.off { opacity: 0.55; }
-.sensor-list .mono { text-align: right; font-size: 0.8rem; }
+.sensor-list .mono { text-align: right; font-size: 0.8rem; white-space: nowrap; }
 .sensor-name,
 .sensor-room { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sensor-room { max-width: 8.5em; font-size: 0.8rem; }

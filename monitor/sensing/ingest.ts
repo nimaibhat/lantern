@@ -15,12 +15,14 @@ const ListenerMsgSchema = z.discriminatedUnion("type", [
 ]);
 
 const STALE_MS = 5_000;
+const DIRECT_MS = 3_000; // a laptop heard directly this recently: its copy in Supabase is the same reading
 const OFFLINE_MS = 15_000;
 const TAG_OFFLINE_MS = 60_000; // taken off, battery flat, or LanternTag left the foreground
 
 export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, receiverOrder: string[]) {
   const window = new RssiWindow(receiverOrder);
   const lastSeen = new Map<string, number>();
+  const direct = new Map<string, number>(); // when each receiver last reported straight to this monitor
   const knownReceivers = new Set(receiverOrder);
   const warnedUnknown = new Set<string>();
   const slug = /^[a-z0-9][a-z0-9-]{0,40}$/i;
@@ -85,6 +87,7 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
       store.listeners[msg.receiverId] = true;
     } else if (msg.type === "rssi") {
       if (now - msg.ts > STALE_MS) return;
+      direct.set(msg.receiverId, now);
       lastSeen.set(msg.receiverId, now);
       store.listeners[msg.receiverId] = true;
       store.tagLastSeen = now;
@@ -122,6 +125,7 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
       store.listeners[msg.receiverId] = true;
     } else if (msg.type === "rssi") {
       if (now - msg.ts > STALE_MS) return true;
+      direct.set(msg.receiverId, now);
       lastSeen.set(msg.receiverId, now);
       store.listeners[msg.receiverId] = true;
       store.tagLastSeen = now;
@@ -131,9 +135,24 @@ export function createIngest(bus: Bus, store: Store, log: Logger, cfg: Config, r
     return true;
   }
 
+  /**
+   * A reading Tracking has but this monitor never got: a laptop that reports to another laptop's hub, which saves it
+   * to Supabase (sensing/relay.ts). Skipped when the laptop reported here directly a moment ago, so nothing counts twice.
+   */
+  function relay(receiverId: string, rssi: number): boolean {
+    const now = Date.now();
+    if (rssi <= -100 || now - (direct.get(receiverId) ?? 0) < DIRECT_MS || !admit(receiverId)) return false;
+    lastSeen.set(receiverId, now);
+    store.listeners[receiverId] = true;
+    store.tagLastSeen = now;
+    window.push({ receiverId, rssi, ts: now });
+    bus.emit("reading", { receiverId, rssi, ts: now });
+    return true;
+  }
+
   function stop() {
     clearInterval(frameInterval);
   }
 
-  return { handleRaw, handleHttp, window, stop };
+  return { handleRaw, handleHttp, relay, window, stop };
 }

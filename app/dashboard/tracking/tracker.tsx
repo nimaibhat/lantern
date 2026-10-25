@@ -152,6 +152,7 @@ export function Tracker({ receivers, rooms = [], patient }: { receivers: Receive
   const watchingRef = useRef(false);
   const bleDeviceRef = useRef<BleDevice | null>(null);
   const adCountRef = useRef(0);
+  const noScannerRef = useRef(false); // this hub has no Python scanner; the PowerShell listener does the job
 
   useEffect(() => {
     const saved = sessionStorage.getItem("lantern-ear");
@@ -434,8 +435,9 @@ export function Tracker({ receivers, rooms = [], patient }: { receivers: Receive
     setLabels((prev) => ({ ...prev, [data.deviceId]: label }));
     const heard = latest.current;
     if (heard) remember(data.deviceId, heard.rssi);
+    noScannerRef.current = data.scanner === false;
     if (listen && local && data.listening === false) {
-      setNote("The background listener could not start. Press Pair again — Chrome will scan directly.");
+      if (!noScannerRef.current) setNote("The background listener could not start. Press Pair again — Chrome will scan directly.");
       return false;
     }
     return true;
@@ -601,6 +603,15 @@ export function Tracker({ receivers, rooms = [], patient }: { receivers: Receive
         const saved = await saveLaptop(trimmed, true, true, true);
         if (saved) {
           setNote("This laptop is listening. Leave this page open.");
+          return;
+        }
+        // No Python scanner here: the PowerShell listener (or Lantern.bat) is what works on Windows, so go straight to it
+        if (noScannerRef.current && deviceIdRef.current) {
+          const id = deviceIdRef.current;
+          const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+          setLaunchId(id);
+          setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
+          setNote("Open PowerShell on this laptop, paste the command below, and leave it running.");
           return;
         }
         // Python failed — fall through to try Web Bluetooth

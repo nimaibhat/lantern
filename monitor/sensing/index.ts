@@ -5,6 +5,7 @@ import { HttpError } from "../module";
 import { registerCalibration } from "./calibrate";
 import { registerClosest } from "./closest";
 import { createIngest } from "./ingest";
+import { startRelay } from "./relay";
 import { registerNearest } from "./nearest";
 import { registerReplay } from "./replay";
 import { registerSim } from "./sim";
@@ -36,6 +37,9 @@ const sensing: MonitorModule = {
 
     // Expose ingest for the server to wire up /ws/listener
     (ctx as unknown as Record<string, unknown>)._ingest = ingest;
+
+    // Tracking laptops that report to another laptop's hub reach this monitor through Supabase
+    startRelay(ctx, ingest);
 
     // Labeled RSSI for training, and replays of recorded sessions
     registerCalibration(ctx);
