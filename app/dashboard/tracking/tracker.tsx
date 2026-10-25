@@ -98,8 +98,10 @@ function ears(list: { id: string }[]): Placement[] {
   return list.filter((r) => r.id && !/^r\d+$/.test(r.id)).map((r) => ({ id: r.id, roomId: r.id }));
 }
 
-export function Tracker({ receivers }: { receivers: Receiver[] }) {
+export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; rooms?: { id: string; name: string }[] }) {
   const [placed, setPlaced] = useState<Placement[]>(ears(receivers));
+  // The room each laptop stands in. The monitor gets the same, so the dot on the Now page is worked out from it.
+  const [roomOf, setRoomOf] = useState<Record<string, string>>(Object.fromEntries(receivers.map((r) => [r.id, r.roomId ?? ""])));
   const [labels, setLabels] = useState<Record<string, string>>(Object.fromEntries(receivers.map((r) => [r.id, r.label])));
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [connected, setConnected] = useState(true);
@@ -222,6 +224,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         if (Array.isArray(data.receivers)) {
           setPlaced(ears(data.receivers));
           setLabels(Object.fromEntries(data.receivers.map((r: { id: string; label: string }) => [r.id, r.label])));
+          setRoomOf(Object.fromEntries(data.receivers.map((r: { id: string; roomId?: string }) => [r.id, r.roomId ?? ""])));
         }
         if (typeof data.shareUrl === "string" && data.shareUrl) setShareUrl(data.shareUrl);
         if (Array.isArray(data.wanted)) {
@@ -560,6 +563,18 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     await pairLaptop(name);
   }
 
+  async function setRoom(id: string, roomId: string) {
+    setNote("");
+    setRoomOf((prev) => ({ ...prev, [id]: roomId }));
+    try {
+      const res = await fetch("/api/sensors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ receiverId: id, roomId }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setNote(data.error ?? "Could not set where that device is.");
+    } catch {
+      setNote("Could not reach the server.");
+    }
+  }
+
   async function remove(id: string) {
     setBusy(true);
     setNote("");
@@ -653,6 +668,22 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
               <p className="muted">dBm</p>
               <div className="track-bar"><span style={{ width: `${pct}%` }} /></div>
               <p>{heard ? `about ${Math.round(roughFeet(rssi))} ft` : silent ? "Not hearing the phone" : "Waiting for LanternTag"}</p>
+              {rooms.length > 0 && (
+                <label className="track-where">
+                  <span className="muted">Location</span>
+                  <select
+                    value={roomOf[c.id] ?? ""}
+                    onChange={(e) => e.target.value && setRoom(c.id, e.target.value)}
+                    aria-label={`Where ${nameOf(c.id)} is`}
+                    suppressHydrationWarning
+                  >
+                    <option value="">Pick a room</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {!heard && (launchId === c.id ? (
                 <a className="btn small" href={`/api/tracking/launch?id=${c.id}`}>Open listener</a>
               ) : (

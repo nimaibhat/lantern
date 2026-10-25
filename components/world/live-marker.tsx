@@ -49,17 +49,36 @@ function smooth(raw: Pt[]): string {
   return d;
 }
 
-export function LiveMarker({ target, velocity, spreadIn, trail = true }: { target: Vec2; velocity?: Vec2; spreadIn?: number; trail?: boolean }) {
+// A live position as it arrived; at is performance.now() at arrival, so the dot can keep moving until the next one.
+export interface LiveFeed { x: number; y: number; velocity?: Vec2; spreadIn?: number; at: number }
+
+// target drives the dot through React props (the 2D plan). feed is read on every animation frame instead, so a
+// reading reaches the dot on the very next frame without re-rendering the page (the Now page). onFrame gets the dot
+// where it is drawn each frame, for anything that has to stay attached to it.
+export function LiveMarker({ target, velocity, spreadIn, trail = true, feed, onFrame }: {
+  target?: Vec2;
+  velocity?: Vec2;
+  spreadIn?: number;
+  trail?: boolean;
+  feed?: () => LiveFeed | undefined;
+  onFrame?: (p: Vec2 | undefined) => void;
+}) {
+  const root = useRef<SVGGElement>(null);
   const dot = useRef<SVGGElement>(null);
   const halo = useRef<SVGCircleElement>(null);
   const beam = useRef<SVGGElement>(null);
   const ahead = useRef<SVGLineElement>(null);
   const glow = useRef<SVGPathElement>(null);
   const chunks = useRef<(SVGPathElement | null)[]>([]);
-  const latest = useRef({ p: target, v: velocity, spread: spreadIn, at: 0, trail });
+  const latest = useRef<{ p?: Vec2; v?: Vec2; spread?: number; at: number; trail: boolean }>({ p: target, v: velocity, spread: spreadIn, at: 0, trail });
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+  const frameRef = useRef(onFrame);
+  frameRef.current = onFrame;
   const l = latest.current;
-  if (l.p.x !== target.x || l.p.y !== target.y || l.spread !== spreadIn || l.trail !== trail)
+  if (target && (!l.p || l.p.x !== target.x || l.p.y !== target.y || l.spread !== spreadIn || l.trail !== trail))
     latest.current = { p: target, v: velocity, spread: spreadIn, at: performance.now(), trail };
+  else l.trail = trail;
 
   useEffect(() => {
     let raf = 0, last = performance.now(), drawn = 0;
@@ -69,7 +88,15 @@ export function LiveMarker({ target, velocity, spreadIn, trail = true }: { targe
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
+      const f = feedRef.current?.();
+      if (f && f.at !== latest.current.at) latest.current = { p: { x: f.x, y: f.y }, v: f.velocity, spread: f.spreadIn, at: f.at, trail: latest.current.trail };
       const L = latest.current;
+      root.current?.setAttribute("visibility", L.p ? "visible" : "hidden");
+      if (!L.p) {
+        frameRef.current?.(undefined);
+        raf = requestAnimationFrame(step);
+        return;
+      }
       const age = Math.min(EXTRAPOLATE_S, Math.max(0, (now - L.at) / 1000));
       const goal = L.v ? { x: L.p.x + L.v.x * age, y: L.p.y + L.v.y * age } : L.p;
 
@@ -95,6 +122,7 @@ export function LiveMarker({ target, velocity, spreadIn, trail = true }: { targe
       const moving = Math.max(0, Math.min(1, (speed - 4) / 16));
 
       dot.current?.setAttribute("transform", `translate(${cur.x.toFixed(2)} ${cur.y.toFixed(2)})`);
+      frameRef.current?.(cur);
       halo.current?.setAttribute("r", Math.max(10, spread).toFixed(1));
       beam.current?.setAttribute("transform", `rotate(${heading.toFixed(1)})`);
       beam.current?.setAttribute("opacity", moving.toFixed(2));
@@ -130,14 +158,14 @@ export function LiveMarker({ target, velocity, spreadIn, trail = true }: { targe
   }, []);
 
   return (
-    <g className="lm" pointerEvents="none">
+    <g ref={root} className="lm" pointerEvents="none" visibility={target ? "visible" : "hidden"}>
       <g className="lm-trail">
         {Array.from({ length: CHUNKS }, (_, c) => (
           <path key={c} ref={(el) => { chunks.current[c] = el; }} opacity={0.08 + 0.87 * ((c + 1) / CHUNKS) ** 2} />
         ))}
         <path ref={glow} className="lm-glow" />
       </g>
-      <g ref={dot} transform={`translate(${target.x} ${target.y})`}>
+      <g ref={dot} transform={target ? `translate(${target.x} ${target.y})` : undefined}>
         <circle ref={halo} className="lm-halo" r={30} />
         <g ref={beam} opacity={0}>
           <path className="lm-beam" d="M0 0 L66 -26 A70 70 0 0 1 66 26 Z" />

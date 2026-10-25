@@ -5,8 +5,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Anchor, HomeModel } from "@/lib/types";
-import { roomPath, routeBetween } from "@/lib/world/geometry";
+import type { Anchor, HomeModel, Vec2 } from "@/lib/types";
+import { bounds, innerPoint, pointInPolygon, roomAt, roomPath, routeBetween } from "@/lib/world/geometry";
 import { HttpError, type ModuleCtx, type MonitorModule } from "../module";
 
 type Source = "fixture" | "supabase";
@@ -111,22 +111,34 @@ const world: MonitorModule = {
       };
     });
 
+    // Stand a listener in a room (at its middle) or at an exact spot on the plan: { receiverId, roomId } or
+    // { receiverId, position: { x, y } } in inches. The inference engine picks the change up on its next frame.
     ctx.http.post("/world/assign", async (req) => {
-      const { receiverId, roomId, heightIn } = req.body as { receiverId?: string; roomId?: string; heightIn?: number };
+      const { receiverId, roomId, heightIn, position } = req.body as { receiverId?: string; roomId?: string; heightIn?: number; position?: Vec2 };
       if (!receiverId || typeof receiverId !== "string") throw new HttpError(400, "receiverId required");
-      if (!roomId || typeof roomId !== "string") throw new HttpError(400, "roomId required");
 
       const h = ctx.world();
-      const room = h.rooms.find((r) => r.id === roomId);
-      if (!room) throw new HttpError(400, `room "${roomId}" not found`);
+      let at: Vec2;
+      if (position && Number.isFinite(position.x) && Number.isFinite(position.y)) {
+        const b = bounds(h.rooms.flatMap((r) => r.polygon));
+        if (position.x < b.minX - 60 || position.x > b.maxX + 60 || position.y < b.minY - 60 || position.y > b.maxY + 60)
+          throw new HttpError(400, "that spot is outside the home");
+        at = { x: Math.round(position.x), y: Math.round(position.y) };
+      } else {
+        if (!roomId || typeof roomId !== "string") throw new HttpError(400, "roomId or position required");
+        const room = h.rooms.find((r) => r.id === roomId);
+        if (!room) throw new HttpError(400, `room "${roomId}" not found`);
+        // The middle of an L shaped room can fall outside it; then the most open point inside
+        at = pointInPolygon(room.centroid, room.polygon) ? room.centroid : innerPoint(room.polygon);
+      }
 
       const existing = h.anchors.findIndex((a) => a.receiverId === receiverId);
-      const anchor: Anchor = { receiverId, position: room.centroid, heightIn: heightIn ?? 36 };
+      const anchor: Anchor = { receiverId, position: at, heightIn: heightIn ?? h.anchors[existing]?.heightIn ?? 36 };
       if (existing >= 0) h.anchors[existing] = anchor;
       else h.anchors.push(anchor);
       h.version++;
       await persist(ctx, loaded.source);
-      return { ok: true, anchor, version: ctx.world().version };
+      return { ok: true, anchor, roomId: roomAt(h, at)?.id, version: ctx.world().version };
     });
 
     ctx.http.post("/world/unassign", async (req) => {

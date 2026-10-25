@@ -338,6 +338,39 @@ body:has(.dash) {
   to { transform: scale(1.6); opacity: 0; }
 }
 
+/* Sensors on the plan and a line from each one that hears the tag to the person (live-layer.tsx). */
+.fp-link {
+  stroke: var(--d-accent);
+  stroke-linecap: round;
+  transition: opacity 0.8s ease, stroke-width 0.8s ease;
+}
+
+.fp-sensor rect { fill: var(--d-surface); stroke: var(--d-text); stroke-width: 2; }
+.fp-sensor.near rect { fill: var(--d-accent); }
+.fp-sensor.off rect { stroke: var(--d-muted); stroke-dasharray: 2 2; }
+
+.fp-sensor-ring {
+  fill: var(--d-accent-soft);
+  stroke: var(--d-accent);
+  stroke-width: 1;
+  opacity: 0.7;
+  transition: r 0.8s ease;
+}
+
+.fp-sensor.off .fp-sensor-ring { display: none; }
+
+.fp-sensor-db {
+  fill: var(--d-muted);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+/* No position for a few seconds: keep the last spot and the trail, faded, and drop the lines. */
+.fp-live.stale .fp-link { opacity: 0; }
+.fp-live.stale .lm { opacity: 0.4; }
+.fp-live.stale .lm-pulse { animation: none; opacity: 0; }
+
 /* ─── Overview ─── */
 
 .overview {
@@ -367,9 +400,103 @@ body:has(.dash) {
 .stats .stat { font-size: 1.4rem; }
 .stats .muted { font-size: 0.8rem; }
 
+.pinpoint { margin-top: 2px; font-size: 0.85rem; }
+
+.sensor-list {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.sensor-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 2.8em;
+  align-items: center;
+  gap: 10px;
+}
+
+.sensor-list.editing li { grid-template-columns: minmax(0, 1fr) auto auto 2.8em auto; }
+
+.sensor-list li.off { opacity: 0.55; }
+.sensor-list .mono { text-align: right; font-size: 0.8rem; }
+.sensor-name,
+.sensor-room { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sensor-room { max-width: 8.5em; font-size: 0.8rem; }
+
+.dash select.sensor-room {
+  width: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-bg);
+  color: var(--d-text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.sensor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 16px;
+  font-size: 0.8rem;
+}
+
+.sensor-head + .sensor-list { margin-top: 6px; }
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--d-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pin-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: none;
+  color: var(--d-text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.pin-btn.on { border-color: var(--d-accent); background: var(--d-accent-soft); color: var(--d-accent); }
+
+.pin-note { color: var(--d-accent); font-size: 0.85rem; }
+.floor-plan.picking { cursor: crosshair; }
+
+.sensor-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.sensor-bars i { width: 3px; border-radius: 1px; background: var(--d-border); }
+.sensor-bars i:nth-child(1) { height: 25%; }
+.sensor-bars i:nth-child(2) { height: 50%; }
+.sensor-bars i:nth-child(3) { height: 75%; }
+.sensor-bars i:nth-child(4) { height: 100%; }
+.sensor-bars i.on { background: var(--d-accent); }
+
+.sensor-hint { margin-top: 10px; font-size: 0.8rem; }
+.sensor-hint a { color: var(--d-accent); }
+
 .tracking { display: flex; flex-direction: column; gap: 4px; }
 .tracking .page-head { margin-bottom: 8px; }
 .page-head h1 { margin: 4px 0; }
+
+.track-where {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0;
+  font-size: 0.85rem;
+}
+
+.dash .track-where select { padding: 4px 8px; font-size: 0.85rem; }
 
 .track-grid {
   display: grid;

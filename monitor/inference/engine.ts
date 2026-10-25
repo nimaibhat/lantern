@@ -3,6 +3,7 @@
 
 import type { Anchor, HomeModel, LocationEvent, LocationSource, PositionEstimate, Prediction, SensorFrame, Vec2 } from "@/lib/types";
 import { adjacency, clampToRoom, innerPoint, roomAt, roomPath, routeBetween } from "@/lib/world/geometry";
+import { roomNamed } from "@/lib/world/names";
 import { baselinePosterior } from "./baseline";
 import { RoomHmm } from "./hmm";
 import { MISSING, align, knnPosterior, usable, type KnnModel } from "./knn";
@@ -37,8 +38,6 @@ export interface EngineOptions {
   newId?: () => string;
 }
 
-const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
 // A listener named after a scanned room ("kitchen", "Bedroom 2") counts as standing in that room until someone
 // places it exactly, so a new home pinpoints as soon as its laptops are named. A placed anchor always wins.
 export function namedAnchors(home: HomeModel, ids: Iterable<string>): Anchor[] {
@@ -46,7 +45,7 @@ export function namedAnchors(home: HomeModel, ids: Iterable<string>): Anchor[] {
   const out: Anchor[] = [];
   for (const id of ids) {
     if (placed.has(id)) continue;
-    const room = home.rooms.find((r) => !r.virtual && r.polygon.length >= 3 && (slug(r.id) === slug(id) || slug(r.name) === slug(id)));
+    const room = roomNamed(home.rooms.filter((r) => !r.virtual && r.polygon.length >= 3), id);
     if (room) out.push({ receiverId: id, position: innerPoint(room.polygon), heightIn: 36 });
   }
   return out;

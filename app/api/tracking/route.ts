@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import os from "os";
+import { forgetReceiver, forwardReading, placeReceiver, syncPlacements } from "@/lib/sensing/monitor-sync";
 import { db, HOUSEHOLD_ID } from "@/lib/supabase/server";
 
 // Caregiver placement and the live trail: which device is in which room,
@@ -129,7 +130,9 @@ export async function GET() {
     }));
     return Response.json({ devices, receivers: [], shareUrl: share, wanted: [...slot().wanted.keys()] });
   }
-  const { data } = await db.from("receivers").select("id, label, room_id, last_rssi, last_rssi_at").eq("household_id", HOUSEHOLD_ID);
+  const { data } = await db.from("receivers").select("id, label, room_id, last_rssi, last_rssi_at, last_seen_at").eq("household_id", HOUSEHOLD_ID);
+  // the monitor stands each laptop that reported in the last 5 min in its room
+  void syncPlacements((data ?? []).map((r) => ({ id: r.id as string, label: r.label as string | null, room_id: r.room_id as string | null, online: !!r.last_seen_at && Date.now() - Date.parse(r.last_seen_at as string) < 5 * 60_000 })));
   const latest = new Map<string, { rssi: number; at: number }>();
   for (const row of data ?? []) {
     if (typeof row.last_rssi !== "number" || !row.last_rssi_at) continue;
@@ -288,6 +291,7 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
     console.error("Could not save a laptop:", error.message);
     return Response.json({ error: "Could not save that device." }, { status: 500 });
   }
+  void syncPlacements([{ id: receiverId, label, room_id: null, online: true }], true);
   const clientProtocol = body.protocol === "https:" || body.protocol === "http:" ? body.protocol : undefined;
   const listening = body.listen && body.hub && requestFromHub(request) ? await listenHere(receiverId, !!body.replace, earPostUrl(request, clientProtocol)) : false;
   return Response.json({ ok: true, deviceId: receiverId, label, listening });
@@ -313,6 +317,7 @@ async function hear(body: { deviceId?: string; rssi?: number }) {
 
   const now = Date.now();
   const rounded = Math.round(rssi);
+  forwardReading(deviceId, rounded); // the monitor moves the dot on the plan from these
   slot().ears.set(deviceId, { rssi: rounded, at: now });
   slot().wanted.delete(deviceId);
   // #region agent log
@@ -354,6 +359,7 @@ async function place(body: { receiverId?: string; roomId?: string; label?: strin
     { onConflict: "id" },
   );
   if (error) return Response.json({ error: "Could not save that device." }, { status: 500 });
+  void placeReceiver(receiverId, { roomId, roomName: room.name as string });
   return Response.json({ ok: true, receiver: { id: receiverId, label, roomId } });
 }
 
@@ -370,6 +376,7 @@ async function remove(body: { receiverId?: string }) {
   slot().seenWrite.delete(receiverId);
   slot().wanted.delete(receiverId);
   if (earProc().id === receiverId) stopEar();
+  forgetReceiver(receiverId);
   return Response.json({ ok: true });
 }
 

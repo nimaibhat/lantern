@@ -34,7 +34,7 @@ A caregiver dashboard sits on top of all four. See `PROJECT_PLAN.md` for scope, 
 
 ```
 app/                 Next.js routes (landing page at /, dashboard at /dashboard)
-app/api/             server routes (scan upload, world model, tracking, alerts)
+app/api/             server routes (scan upload, world model, tracking, sensors, live bridge, alerts)
 app/dashboard/       one folder per page; shared shell, nav, overview and styles in _components/
 app/routine/         the patient's TV: Now and Next, chime and calm voice, cues, Vapi companion
 app/signs/           printable door signs from the scanned rooms
