@@ -11,7 +11,7 @@ export const vapiConfigured = !!(KEY && ASSISTANT);
 const MAX_CALL_S = 30; // a line is a few seconds; this caps the cost if a call never ends
 const HANG_UP_MS = 900; // quiet this long after speaking means the line is done, not a pause between sentences
 // Slower reads softer and is easier to follow at night. Vapi's own voices take speed but no volume or warmth setting.
-const VOICE = { provider: "vapi", voiceId: "Layla", speed: 0.82 } as const;
+const VOICE = { provider: "vapi", voiceId: "Layla", speed: 0.87 } as const;
 
 let client: Promise<Vapi> | undefined;
 const load = () =>
