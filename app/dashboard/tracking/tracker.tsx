@@ -107,6 +107,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [mineName, setMineName] = useState("");
   const [hub, setHub] = useState(false);
   const [launchId, setLaunchId] = useState<string | null>(null);
+  const [macCmd, setMacCmd] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
   const [note, setNote] = useState("");
@@ -418,6 +420,8 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
     setNote("");
     setLaunchId(null);
+    setMacCmd(null);
+    setCopied(false);
     setBusy(true);
     if (existingId) deviceIdRef.current = existingId;
     try {
@@ -439,11 +443,12 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           return;
         }
         if (!bluetooth()) {
-          // No Web Bluetooth (older Chrome, or Bluetooth permission denied) — fall back to .command download
+          // No Web Bluetooth (older Chrome, or Bluetooth permission denied) — fall back to Terminal command
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
-          setLaunchId(deviceIdRef.current);
-          setNote("Chrome cannot access Bluetooth on this Mac. Click \"Open listener\" below to download Lantern.command — open Terminal, run: bash ~/Downloads/Lantern.command");
+          const id = deviceIdRef.current;
+          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setNote("Chrome cannot access Bluetooth on this Mac. Copy the command below, paste it in Terminal, and leave it running.");
           return;
         }
         const watched = await listenInPage();
@@ -464,17 +469,19 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
             setNote("Connected and hearing the phone. Leave this tab open.");
             return;
           }
-          // Web Bluetooth paired but no signal — offer the .command listener
-          setLaunchId(deviceIdRef.current);
-          setNote("Chrome paired but the signal isn't coming through. Click \"Open listener\" below to download Lantern.command — open Terminal, run: bash ~/Downloads/Lantern.command");
+          // Web Bluetooth paired but no signal — offer Terminal command
+          const id = deviceIdRef.current;
+          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setNote("Chrome paired but the signal isn't coming through. Copy the command below and paste it in Terminal.");
           return;
         }
-        // Web Bluetooth unavailable — save device and show .command download
+        // Web Bluetooth unavailable — show Terminal command
         {
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
-          setLaunchId(deviceIdRef.current);
-          setNote("Click \"Open listener\" below to download Lantern.command. Open Terminal and run: bash ~/Downloads/Lantern.command");
+          const id = deviceIdRef.current;
+          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setNote("Copy the command below and paste it in Terminal. It will install what it needs and start listening.");
         }
         return;
       }
@@ -694,6 +701,30 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         </form>
       )}
       {shownNote && <p>{shownNote}</p>}
+      {macCmd && (
+        <div className="mac-cmd" style={{ marginTop: "0.5rem" }}>
+          <code style={{
+            display: "block",
+            padding: "0.6rem 0.8rem",
+            background: "var(--d-surface, #1e1e1e)",
+            color: "var(--d-text, #e0e0e0)",
+            borderRadius: 6,
+            fontSize: "0.85rem",
+            wordBreak: "break-all",
+            userSelect: "all",
+          }}>{macCmd}</code>
+          <button
+            className="btn small"
+            style={{ marginTop: "0.4rem" }}
+            onClick={() => {
+              navigator.clipboard.writeText(macCmd).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }).catch(() => {});
+            }}
+          >{copied ? "Copied" : "Copy"}</button>
+        </div>
+      )}
       {shareUrl && placed.length > 0 && (
         <p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
           Other laptops: open <strong>{shareUrl}</strong> and press Pair
