@@ -11,6 +11,9 @@ node_modules/
 # local https certificates
 certificates/
 
+# Windows reserved name created by a bad redirect
+nul
+
 # Next.js build output
 .next/
 /out/
