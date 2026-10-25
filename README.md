@@ -42,6 +42,35 @@ Lantern assists caregivers. It does not replace supervision and is not a medical
   </tr>
 </table>
 
+## Why not just cameras?
+
+Cameras are the usual answer, but a camera only records what happened. Someone still has to be watching, and at
+3 AM the caregiver is asleep. Motion alerts go off for everything, so people learn to ignore them. And most
+families won't put a camera in a bedroom or bathroom, which is where a lot of the risk is.
+
+We went the other way. Lantern only knows which room someone is in, not what they look like or what they're doing.
+It knows the rules of the home ("the kitchen at night", "near the front door"), and it acts first: a calm voice
+and a familiar photo in that room, guiding them back to bed. The caregiver only gets woken if that doesn't work.
+
+## What we struggled with
+
+Getting Bluetooth to work reliably took most of the weekend. The signal from a phone bounces off walls, drops
+when it's in a pocket, and reads 8 to 15 dB differently on two laptops sitting side by side. Our first room
+classifier was trained on simulated data and fell apart in a real apartment, and the dot on the map kept jumping
+between rooms.
+
+We got there by debugging it one problem at a time:
+- **Phones stopped broadcasting** when the screen locked, so the tag runs with Auto-Lock off and Guided Access on.
+- **Laptops disagreed** about the same signal, so we added per-laptop calibration offsets.
+- **Readings went stale**: a listener kept re-sending its last value after the phone walked away, so readings now
+  expire.
+- **The dot jumped around**, so we smooth each sensor over a few seconds and place the person on the real walking
+  route between the two nearest sensors, with a door-graph model that only allows moves through real doorways.
+- **Browsers blocked the live feed** between https pages and the monitor, so the web app now relays it.
+
+It still isn't perfect, and the dot occasionally cuts through a wall. But it follows a real person through a real
+apartment, and that took a lot of late-night walking up and down the hallway.
+
 ## How it fits together
 
 ![Lantern architecture](docs/architecture.png)
