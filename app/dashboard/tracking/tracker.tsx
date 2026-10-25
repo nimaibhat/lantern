@@ -439,7 +439,11 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           return;
         }
         if (!bluetooth()) {
-          setNote("Chrome cannot access Bluetooth. Check System Settings > Privacy & Security > Bluetooth and make sure Chrome is allowed.");
+          // No Web Bluetooth (older Chrome, or Bluetooth permission denied) — fall back to .command download
+          const saved = await saveLaptop(trimmed, false, false);
+          if (!saved) return;
+          setLaunchId(deviceIdRef.current);
+          setNote("Chrome cannot access Bluetooth on this Mac. Click \"Open listener\" below to download Lantern.command — open Terminal, run: bash ~/Downloads/Lantern.command");
           return;
         }
         const watched = await listenInPage();
@@ -452,10 +456,26 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         }
         if (watched === "watching") {
           const saved = await saveLaptop(trimmed, false, false);
-          if (saved) setNote("LanternTag is selected. Leave this page open until this laptop shows a dBm reading.");
+          if (!saved) return;
+          setNote("Scanning for signal... keep this tab in the foreground.");
+          const before = adCountRef.current;
+          await new Promise((r) => setTimeout(r, 6000));
+          if (adCountRef.current > before && latest.current && Date.now() - latest.current.at < 8000) {
+            setNote("Connected and hearing the phone. Leave this tab open.");
+            return;
+          }
+          // Web Bluetooth paired but no signal — offer the .command listener
+          setLaunchId(deviceIdRef.current);
+          setNote("Chrome paired but the signal isn't coming through. Click \"Open listener\" below to download Lantern.command — open Terminal, run: bash ~/Downloads/Lantern.command");
           return;
         }
-        setNote("Chrome could not start Bluetooth scanning. Make sure Bluetooth is on, and that this page is open via HTTPS (not HTTP).");
+        // Web Bluetooth unavailable — save device and show .command download
+        {
+          const saved = await saveLaptop(trimmed, false, false);
+          if (!saved) return;
+          setLaunchId(deviceIdRef.current);
+          setNote("Click \"Open listener\" below to download Lantern.command. Open Terminal and run: bash ~/Downloads/Lantern.command");
+        }
         return;
       }
       if (kind !== "windows") {
