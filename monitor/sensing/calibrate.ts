@@ -1,4 +1,4 @@
-// Calibration (PROJECT_PLAN Part 3 step 6): stand in a room with the tag and record labeled RSSI for the classifier.
+// Calibration: stand in a room with the tag and record labeled RSSI for the classifier.
 //
 // POST /calibrate/start {roomId, x?, y?, session?}  start (or relabel) a session; the label is where the PERSON is
 // POST /calibrate/stop                             end it

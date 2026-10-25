@@ -1,4 +1,4 @@
-"""Fake RSSI in the shared CSV format (PROJECT_PLAN 1.5), simulated from the listener anchors in the home model.
+"""Fake RSSI in the shared CSV format, simulated from the listener anchors in the home model.
 
 Each listener hears the tag at 5 Hz: rssi = txPower - 10 n log10(d) - 6 dB per wall + noise. Readings are then
 reduced to one frame per second, the median of the last 3 s per receiver (-100 if fewer than 2), like the

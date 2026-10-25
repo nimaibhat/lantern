@@ -1,4 +1,4 @@
-# Who reviews what. Mirrors the ownership table in PROJECT_PLAN.md 2.1.
+# Who reviews what.
 # Aarnav: add your GitHub handle to the lines marked (Aarnav) once you have repo access.
 
 # Saran: Bluetooth, devices, monitor host
@@ -11,7 +11,6 @@
 /lib/sensing/                   @SaranKalaiyarasan
 /tools/                         @SaranKalaiyarasan
 /.github/                       @SaranKalaiyarasan
-/AGENTS.md                      @SaranKalaiyarasan
 /supabase/migrations/0006_sensing.sql  @SaranKalaiyarasan
 
 # Nimai: world model, 3D view, accessibility audit

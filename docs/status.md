@@ -63,7 +63,7 @@ Checked on 2026-10-25 against the code on `main`. Update this file when an item 
   copy of the household and zone rules in `monitor/actions/index.ts` instead of Supabase. The database and that
   copy agree today (h1, quiet 21:00 to 07:00, same four rules). Next: save Settings to Supabase, have the monitor
   load the household and `zone_rules` on start and on a reload call, and let Settings edit zone rules and the
-  escalation profile (plan Part 6 step 8). Until then `DEMO_HOUR=3` is how an afternoon demo gets night rules.
+  escalation profile. Until then `DEMO_HOUR=3` is how an afternoon demo gets night rules.
   Aarnav.
 - ~~Roku status on the overview~~ (the Roku is dropped).
 - `/analytics/summary` lives in memory and resets when the monitor restarts; persist outcomes (schema change through the Supabase MCP). Aarnav.
@@ -86,7 +86,7 @@ The group saw poor near, mid and far readings. Causes found while reading the co
 4. Before both points are set it uses -50 dBm at 3 ft and n = 2.8, so the feet shown are guesses; hide them until
    calibrated.
 
-## Stretch (cut first, in the plan's order)
+## Stretch (cut first, in this order)
 
 Splat and Marble previews (partly built), ask-your-home (`/ask`), inbound SMS acknowledge, weekly Claude summary,
 contextual bandit, anomaly detection, fingerprint position regression and `ml/fit_pathloss.py`, Kasa breadcrumb

@@ -1,4 +1,4 @@
-// Replay an RSSI CSV (PROJECT_PLAN 1.5 format) through the engine, like Saran's raw replay, and score it
+// Replay an RSSI CSV (the shared format, as in fixtures/rssi-samples.fake.csv) through the engine, like Saran's raw replay, and score it
 // against the CSV's room labels. Used by tools/vineet-replay.ts and the tests.
 
 import type { HomeModel, PositionEstimate } from "@/lib/types";

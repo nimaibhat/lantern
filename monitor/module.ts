@@ -1,4 +1,4 @@
-// The contract each owner's module implements. See PROJECT_PLAN.md 1.3.
+// The contract each owner's module implements.
 
 import type { HomeModel } from "@/lib/types";
 import type { Bus } from "./bus";
