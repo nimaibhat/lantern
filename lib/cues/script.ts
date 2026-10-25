@@ -17,12 +17,16 @@ export interface CueInput {
   roomId?: string; // where they are now
   confident: boolean; // false: say the message only, without rooms or directions
   night: boolean;
+  bedroomId?: string; // their own bedroom; without it, the first bedroom in the scan
 }
+
+// Up at night: said by the TV and by whichever listener laptop the phone is closest to.
+export const bedtimeLine = (name: string) => `${name}, please go to your bedroom and sleep.`;
 
 // The name always comes first: it is the most personal word and it gets their attention before the rest.
 const MESSAGE: Record<RiskKind, (name: string) => string> = {
-  "kitchen-night": (n) => `${n}, it's still nighttime. Let's go back to bed.`,
-  "night-wandering": (n) => `${n}, it's still nighttime. Let's go back to bed.`,
+  "kitchen-night": bedtimeLine,
+  "night-wandering": bedtimeLine,
   "exit-approach": (n) => `${n}, you're home. Let's go back to your room.`,
   "long-bathroom-stay": (n) => `${n}, are you all right?`,
   "no-movement": (n) => `${n}, how about a glass of water?`,
@@ -58,14 +62,19 @@ export function cueScript(input: CueInput): CueScript {
   if (!input.confident || !from) return { message, route: [] };
 
   const kinds = targetKinds(input.kind, input.night);
-  const target = kinds.map((k) => rooms.find((r) => r.kind === k)).find(Boolean);
+  const own = rooms.find((r) => r.id === input.bedroomId && r.kind === "bedroom");
+  const target = kinds.map((k) => (k === "bedroom" && own) || rooms.find((r) => r.kind === k)).find(Boolean);
   const path = target ? roomPath(input.home, from.id, target.id) : [];
-  if (!target || path.length < 2) return { message, detail: here(from), route: [] };
+  // Back to bed: the one line is the whole cue (said twice by the screen); the way back is only shown.
+  const bedtime = input.kind === "kitchen-night" || input.kind === "night-wandering";
+  if (!target || path.length < 2) return { message, ...(bedtime ? {} : { detail: here(from) }), route: [] };
+  const route = path.map((id) => rooms.find((r) => r.id === id)?.name ?? id);
+  if (bedtime) return { message, route };
 
   const through = path.slice(1, -1).map((id) => `the ${inSentence(rooms.find((r) => r.id === id)?.name ?? id)}`);
   const back = target.kind === "bedroom" ? "back " : "";
   const way = through.length ? `${label(target)} is ${back}through ${through.join(" and ")}.` : `${label(target)} is just next door.`;
-  return { message, detail: `${here(from)} ${way}`, route: path.map((id) => rooms.find((r) => r.id === id)?.name ?? id) };
+  return { message, detail: `${here(from)} ${way}`, route };
 }
 
 // Said once they are back where they should be.

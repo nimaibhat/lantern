@@ -166,7 +166,8 @@ export async function GET() {
     const ear = latest.get(id);
     return !ear || now - ear.at >= HEAR_FRESH_MS;
   });
-  return Response.json({ devices, receivers, shareUrl: share, wanted });
+  // hubId: the laptop this server listens as, so the hub's own page knows which card is itself
+  return Response.json({ devices, receivers, shareUrl: share, wanted, hubId: earProc().id });
 }
 
 export async function POST(request: Request) {

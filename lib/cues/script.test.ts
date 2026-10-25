@@ -9,22 +9,22 @@ const home = JSON.parse(readFileSync("fixtures/home-model.json", "utf8")) as Hom
 const cue = (kind: Parameters<typeof cueScript>[0]["kind"], roomId: string, extra: { confident?: boolean; night?: boolean } = {}) =>
   cueScript({ kind, name: "Patient", home, roomId, confident: extra.confident ?? true, night: extra.night ?? true });
 
-test("kitchen at night: where they are and the way back through the scan's doors", () => {
+test("back to bed at night: the one line, with the way back through the scan's doors shown only", () => {
   assert.deepEqual(cue("kitchen-night", "kitchen"), {
-    message: "Patient, it's still nighttime. Let's go back to bed.",
-    detail: "You're in the kitchen. Your bed is back through the hallway.",
+    message: "Patient, please go to your bedroom and sleep.",
     route: ["Kitchen", "Hallway", "Bedroom"],
   });
+  assert.deepEqual(cue("night-wandering", "hallway"), { message: "Patient, please go to your bedroom and sleep.", route: ["Hallway", "Bedroom"] });
 });
 
 test("one door away says next door", () => {
-  assert.equal(cue("night-wandering", "hallway").detail, "You're in the hallway. Your bed is just next door.");
-  assert.deepEqual(cue("night-wandering", "hallway").route, ["Hallway", "Bedroom"]);
+  assert.equal(cue("exit-approach", "hallway").detail, "You're in the hallway. Your bed is just next door.");
+  assert.deepEqual(cue("exit-approach", "hallway").route, ["Hallway", "Bedroom"]);
 });
 
 test("an unsure room says the message only, never a wrong room", () => {
-  assert.deepEqual(cue("kitchen-night", "kitchen", { confident: false }), { message: "Patient, it's still nighttime. Let's go back to bed.", route: [] });
-  assert.deepEqual(cue("kitchen-night", "garage"), { message: "Patient, it's still nighttime. Let's go back to bed.", route: [] });
+  assert.deepEqual(cue("kitchen-night", "kitchen", { confident: false }), { message: "Patient, please go to your bedroom and sleep.", route: [] });
+  assert.deepEqual(cue("kitchen-night", "garage"), { message: "Patient, please go to your bedroom and sleep.", route: [] });
 });
 
 test("the front door leads to the bedroom at night and the TV room by day", () => {
@@ -49,7 +49,7 @@ test("already in the target room names the room only", () => {
 test("room names read naturally inside a sentence", () => {
   assert.equal(inSentence("TV room"), "TV room");
   assert.equal(inSentence("Front door"), "front door");
-  assert.equal(cue("night-wandering", "tv-room").detail, "You're in the TV room. Your bed is back through the hallway.");
+  assert.equal(cue("exit-approach", "tv-room").detail, "You're in the TV room. Your bed is back through the hallway.");
 });
 
 test("closing line and routine prompts", () => {

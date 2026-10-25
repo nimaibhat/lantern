@@ -333,7 +333,9 @@ test("through the monitor: a bathroom trip does nothing, a kitchen visit waits o
     const state = await (await fetch(`${base}/debug/state`)).json();
     assert.equal(state.active[0].kind, "kitchen-night");
 
-    await emit("bedroom");
+    // Their own bedroom in whichever home loaded (the fixture, or a scan from Supabase): only that one is bed.
+    const world = (await (await fetch(`${base}/world`)).json()) as { rooms: { id: string; kind: string }[] };
+    await emit(world.rooms.find((r) => r.kind === "bedroom")!.id);
     await new Promise((r) => setImmediate(r));
     assert.equal(risks.at(-1)?.state, "resolved");
     assert.equal(screens.length, 0, "back in bed before any cue: the screen never changed");

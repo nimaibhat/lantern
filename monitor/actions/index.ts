@@ -40,11 +40,19 @@ const GREETING_MS = 15_000; // how long the greeting stays before the routine co
 const GREET_AGAIN_MS = 10 * 60_000; // walking in and out of the TV room should not greet every time
 const NOTE_MS = 60_000; // how long a caregiver's message stays on the TV
 
-// CUE_GRACE_MIN (0 to 15) overrides the grace period of either profile.
+// CUE_GRACE_MIN (0 to 15), CUE_COUNT (1 to 5) and CUE_REPEAT_S (5 to 300) override either profile.
 function profileFrom(env: Record<string, string | undefined>, name: "demo" | "real"): EscalationProfile {
-  const min = Number(env.CUE_GRACE_MIN);
-  const grace = env.CUE_GRACE_MIN !== undefined && env.CUE_GRACE_MIN !== "" && min >= 0 && min <= 15 ? { graceS: Math.round(min * 60) } : {};
-  return { ...ESCALATION[name], ...grace };
+  const num = (key: string, lo: number, hi: number) => {
+    const v = Number(env[key]);
+    return env[key] !== undefined && env[key] !== "" && v >= lo && v <= hi ? v : undefined;
+  };
+  const graceMin = num("CUE_GRACE_MIN", 0, 15), cues = num("CUE_COUNT", 1, 5), repeat = num("CUE_REPEAT_S", 5, 300);
+  return {
+    ...ESCALATION[name],
+    ...(graceMin !== undefined && { graceS: Math.round(graceMin * 60) }),
+    ...(cues !== undefined && { maxCues: Math.round(cues) }),
+    ...(repeat !== undefined && { repeatEveryS: repeat }),
+  };
 }
 
 const field = (body: unknown, key: string): unknown => (body && typeof body === "object" ? (body as Record<string, unknown>)[key] : undefined);
@@ -64,6 +72,13 @@ const actions: MonitorModule = {
     const voice = createVoiceCaller(process.env, ctx.log);
     const roku = new RokuClient(process.env.ROKU_HOST || undefined, ctx.log);
     const night = () => isQuiet(Date.now(), HOUSEHOLD);
+    // Their own bedroom (PATIENT_BEDROOM, a room id from the scan): only that one counts as back in bed. Unset, any
+    // bedroom does, so a home without a listener in one particular bedroom can still settle a reminder.
+    const ownBedroom = () => room(process.env.PATIENT_BEDROOM ?? "")?.id;
+    const inOwnBed = (roomId: string) => {
+      const own = ownBedroom();
+      return own ? roomId === own : room(roomId)?.kind === "bedroom";
+    };
     // Each contact's phone for Twilio, or their ntfy topic when Twilio is not live (notify.ts).
     const primary = contactAddress(process.env.CAREGIVER_PHONE_NUMBER ?? "", process.env.NTFY_CAREGIVER_TOPIC, notify.live);
     const backup = contactAddress(process.env.BACKUP_PHONE_NUMBER ?? "", process.env.NTFY_BACKUP_TOPIC, notify.live);
@@ -80,6 +95,8 @@ const actions: MonitorModule = {
       household: HOUSEHOLD,
       rules: zoneRules,
       roomKind: (id) => room(id)?.kind,
+      ownBedroom,
+      nightAnyRoom: process.env.NIGHT_ANY_ROOM === "1",
       emit: (risk) => {
         ctx.log("risk", risk.kind, risk.roomId, risk.state, risk.trigger);
         ctx.bus.emit("risk", risk);
@@ -102,13 +119,14 @@ const actions: MonitorModule = {
       baseUrl: process.env.PUBLIC_BASE_URL || "http://localhost:3000",
       roomName: (id) => room(id)?.name ?? id,
       isSafe: (risk: RiskEvent, roomId, ts) => {
+        if (risk.kind === "night-wandering" || risk.kind === "kitchen-night") return inOwnBed(roomId); // another bedroom is not bed
         const kind = room(roomId)?.kind;
         return resolves(risk.kind, kind, ruleFor(zoneRules, kind, ts, HOUSEHOLD.timezone));
       },
       // Built from the scan at each reminder, so a person who moved hears the way back from where they are now.
       redirectFor: (risk, here, cue): Redirect => {
         const slot = VOICE_SLOT[risk.kind];
-        const script = cueScript({ kind: risk.kind, name: HOUSEHOLD.patientName, home: ctx.world(), roomId: here.roomId, confident: here.confident, night: night() });
+        const script = cueScript({ kind: risk.kind, name: HOUSEHOLD.patientName, home: ctx.world(), roomId: here.roomId, confident: here.confident, night: night(), bedroomId: ownBedroom() });
         return {
           ...script,
           message: (slot && lines.get(slot)) || script.message,
@@ -118,8 +136,8 @@ const actions: MonitorModule = {
         };
       },
       // "Good night, sleep well" only in bed; leaving the kitchen for the TV room at 3 AM gets a plain thank you.
-      closingFor: (_risk, roomId) => closingLine(HOUSEHOLD.patientName, night() && room(roomId)?.kind === "bedroom"),
-      settled: (roomId) => !night() || room(roomId)?.kind === "bedroom",
+      closingFor: (_risk, roomId) => closingLine(HOUSEHOLD.patientName, night() && inOwnBed(roomId)),
+      settled: (roomId) => !night() || inOwnBed(roomId),
       emitRisk: later((risk: RiskEvent) => ctx.bus.emit("risk", risk)),
       emitPatient: later((state) => ctx.bus.emit("patient", state)),
       notify,

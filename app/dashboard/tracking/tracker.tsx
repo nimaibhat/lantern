@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { roughFeet } from "@/lib/sensing/feet";
 import { closestRoom, type Placement, type Reading } from "@/lib/sensing/nearest-room";
 import type { Receiver } from "@/lib/types";
+import { bedtimeLine } from "@/lib/cues/script";
+import { sayLine } from "../../routine/vapi-voice";
+import "../../routine/patient.css";
 
 const WS_URL = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const SERVICE = "4c414e54-4552-4e00-a000-000000000001";
@@ -94,11 +97,33 @@ async function askAgent(deviceId: string): Promise<boolean> {
   }
 }
 
+type Patient = { name: string; quietStart: string; quietEnd: string; bedroomId?: string; householdId: string };
+
+// The bedtime line: said this many times, this far apart, then not again for a while from the same laptop
+const SAY_TIMES = 2;
+const SAY_GAP_MS = 5000;
+const SAY_AGAIN_MS = 60_000; // from the first word, so while they stay it comes about once a minute
+const RECHECK_MS = 5000;
+// The calm screen (app/routine/patient.css): nothing at first, then a slow fade; the voice starts as the photo
+// appears, and the screen stays a little after the last word before fading away.
+const SCREEN_LEAD_MS = 5000;
+const SCREEN_AFTER_MS = 6000;
+const SCREEN_FADE_MS = 2500;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Quiet hours on this laptop's clock: "21:00" to "07:00" wraps past midnight
+function isNight(p: Patient) {
+  const now = new Date().toTimeString().slice(0, 5);
+  return p.quietStart > p.quietEnd ? now >= p.quietStart || now < p.quietEnd : now >= p.quietStart && now < p.quietEnd;
+}
+
+const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 function ears(list: { id: string }[]): Placement[] {
   return list.filter((r) => r.id && !/^r\d+$/.test(r.id)).map((r) => ({ id: r.id, roomId: r.id }));
 }
 
-export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; rooms?: { id: string; name: string }[] }) {
+export function Tracker({ receivers, rooms = [], patient }: { receivers: Receiver[]; rooms?: { id: string; name: string }[]; patient?: Patient }) {
   const [placed, setPlaced] = useState<Placement[]>(ears(receivers));
   // The room each laptop stands in. The monitor gets the same, so the dot on the Now page is worked out from it.
   const [roomOf, setRoomOf] = useState<Record<string, string>>(Object.fromEntries(receivers.map((r) => [r.id, r.roomId ?? ""])));
@@ -108,6 +133,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
   const [mineId, setMineId] = useState<string | null>(null);
   const [mineName, setMineName] = useState("");
   const [hub, setHub] = useState(false);
+  const [hubId, setHubId] = useState<string | null>(null); // the laptop the server itself listens as
   const [launchId, setLaunchId] = useState<string | null>(null);
   const [termCmd, setTermCmd] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -213,6 +239,67 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
   const call = closestRoom(list, placed, held.current);
   if (call) held.current = call.roomId;
 
+  // At night, when the phone is closest to this laptop, this laptop asks them to go back to bed. Each laptop decides
+  // for itself from the same readings, so it works in any room and whichever laptop is the hub. The laptop in their
+  // own bedroom stays quiet. Moving on to another laptop stops the line here.
+  const spokeAt = useRef(0);
+  const [bedtime, setBedtime] = useState<{ at: number; leaving: boolean } | null>(null); // the calm screen
+  // This tab's own laptop: the one paired here, the one named in ?laptop= (tools/open-tracking opens it that way),
+  // or on the hub the one the server listens as
+  const [asLaptop] = useState(() => (typeof location === "undefined" ? null : new URLSearchParams(location.search).get("laptop")));
+  // ?black=1: a plain black screen (for filming) that still listens; only the calm screen ever shows on it
+  const [black] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).get("black") === "1");
+  const namedId = asLaptop ? Object.keys(labels).find((id) => slug(labels[id] ?? "") === slug(asLaptop)) : undefined;
+  const selfId = mineId ?? namedId ?? (hub ? hubId : null);
+  const closestIsMine = !!call && !!selfId && call.receiverId === selfId;
+  // Only another laptop taking over stops the line. A phone that goes quiet (its screen locks, the app goes to the
+  // background) is still where it was, so the screen and the second line carry on.
+  const closestElsewhere = !!call && !!selfId && call.receiverId !== selfId;
+  const running = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (closestElsewhere) running.current?.abort();
+  }, [closestElsewhere]);
+  useEffect(() => () => running.current?.abort(), []);
+  // Still here after the line: look again every few seconds, so staying out of bed gets the reminder again once
+  // SAY_AGAIN_MS has passed, not only arriving
+  const [recheck, setRecheck] = useState(0);
+  useEffect(() => {
+    if (!closestIsMine) return;
+    const id = setInterval(() => setRecheck(Date.now()), RECHECK_MS);
+    return () => clearInterval(id);
+  }, [closestIsMine]);
+  useEffect(() => {
+    if (!closestIsMine || !patient || !selfId || !isNight(patient) || running.current) return;
+    const here = roomOf[selfId] || slug(labels[selfId] ?? "");
+    if (patient.bedroomId && here === patient.bedroomId) return;
+    if (Date.now() - spokeAt.current < SAY_AGAIN_MS) return;
+    const line = new AbortController();
+    running.current = line;
+    const at = Date.now();
+    line.signal.addEventListener("abort", () => {
+      if (running.current === line) running.current = null;
+      setBedtime((b) => (b?.at === at ? null : b));
+    }, { once: true });
+    setBedtime({ at, leaving: false });
+    void (async () => {
+      await wait(SCREEN_LEAD_MS);
+      // Counted from the first word, so a run cut short before it (React's dev double run, a brief brush past) retries
+      if (!line.signal.aborted) spokeAt.current = Date.now();
+      for (let i = 0; i < SAY_TIMES && !line.signal.aborted; i++) {
+        if (i > 0) await wait(SAY_GAP_MS);
+        if (!line.signal.aborted) await sayLine(bedtimeLine(patient.name), line.signal);
+      }
+      if (line.signal.aborted) return;
+      await wait(SCREEN_AFTER_MS);
+      if (line.signal.aborted) return;
+      setBedtime({ at, leaving: true });
+      await wait(SCREEN_FADE_MS);
+      setBedtime((b) => (b?.at === at ? null : b));
+    })().finally(() => {
+      if (running.current === line) running.current = null;
+    });
+  }, [closestIsMine, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     let stop = false;
     const pull = async () => {
@@ -231,6 +318,7 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
           setRoomOf(Object.fromEntries(data.receivers.map((r: { id: string; roomId?: string }) => [r.id, r.roomId ?? ""])));
         }
         if (typeof data.shareUrl === "string" && data.shareUrl) setShareUrl(data.shareUrl);
+        setHubId(typeof data.hubId === "string" ? data.hubId : null);
         if (Array.isArray(data.wanted)) {
           setWantedIds((data.wanted as unknown[]).filter((id): id is string => typeof id === "string" && /^ear-[a-f0-9]{8}$/i.test(id)));
         }
@@ -268,6 +356,15 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
     savedRoom.current = call.roomId;
     const from = prev ? labelsRef.current[prev] ?? "" : "";
     const to = labelsRef.current[call.receiverId] ?? "";
+    // The hub tells the monitor, so with ROOM_FROM=closest the alerts follow the same laptop that speaks. Only the
+    // hub, or every open Tracking page would report the same move.
+    if (hub) {
+      fetch("/api/tracking/closest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: to, roomId: roomOf[call.receiverId] || undefined, rssi: call.rssi }),
+      }).catch(() => {});
+    }
     fetch("/api/tracking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -639,6 +736,19 @@ export function Tracker({ receivers, rooms = [] }: { receivers: Receiver[]; room
 
   return (
     <div className="tracking">
+      {black && <div className="pt-black" />}
+      {/* The calm screen while the line is said: the photo of where to go, then the words. A tap closes it. */}
+      {bedtime && patient && (
+        <div className={bedtime.leaving ? "pt-overlay pt-voice pt-leaving" : "pt-overlay pt-voice"} key={bedtime.at} onClick={() => running.current?.abort()}>
+          <img
+            className="pt-photo"
+            src={`/api/patient/media?h=${encodeURIComponent(patient.householdId)}&path=${encodeURIComponent(`${patient.householdId}/redirect-photo.jpg`)}`}
+            alt=""
+            onError={(e) => (e.currentTarget.style.display = "none")}
+          />
+          <p className="pt-message">{bedtimeLine(patient.name)}</p>
+        </div>
+      )}
       <div className="page-head">
         <div>
           <p className="eyebrow">Tracking {connected ? "live" : "offline"}</p>

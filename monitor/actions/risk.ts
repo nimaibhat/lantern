@@ -63,6 +63,8 @@ export interface RiskDeps {
   household: QuietHours;
   rules: ZoneRule[];
   roomKind: (roomId: string) => RoomKind | undefined;
+  ownBedroom?: () => string | undefined; // their own bedroom; unset, any bedroom counts as bed
+  nightAnyRoom?: boolean; // at night, any room but bed and the bathroom is a reminder at once (not only after NIGHT_WANDER_MS)
   emit: (risk: RiskEvent) => void;
   now?: () => number;
   newId?: () => string;
@@ -116,7 +118,9 @@ export function createRiskEngine(deps: RiskDeps) {
     source = e.source;
     enteredAt = now();
     const kind = kindOf(e.roomId);
-    outOfBedSince = kind === "bedroom" ? undefined : (outOfBedSince ?? enteredAt);
+    const bed = deps.ownBedroom?.();
+    const inBed = bed ? e.roomId === bed : kind === "bedroom";
+    outOfBedSince = inBed ? undefined : (outOfBedSince ?? enteredAt);
 
     // Arriving where we predicted: record the lead time instead of raising the same risk again.
     const predicted = pending.get(e.roomId);
@@ -129,6 +133,7 @@ export function createRiskEngine(deps: RiskDeps) {
 
     const rule = ruleFor(deps.rules, kind, ts, tz);
     if (rule?.action === "redirect" && rule.kind) raise(rule.kind, e.roomId, ts);
+    else if (deps.nightAnyRoom && !inBed && kind !== undefined && kind !== "bathroom" && open.size === 0 && isQuiet(ts, deps.household)) raise("night-wandering", e.roomId, ts);
   }
 
   function onPrediction(p: Prediction) {

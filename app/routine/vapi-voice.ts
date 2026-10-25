@@ -28,8 +28,36 @@ export function preloadVapi() {
 
 let current: Promise<unknown> = Promise.resolve();
 
-// Says `text` in the calm voice. Resolves false when Vapi is not set up or the call could not start, so the caller
-// can fall back to the browser's voice. Aborting the signal hangs up.
+// One voice at a time on this laptop, across tabs too (the Tracking page and a TV tab both speak): each line waits
+// for the one before it to finish.
+let local: Promise<unknown> = Promise.resolve();
+export function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request("lantern-voice", fn) as Promise<T>;
+  const turn = local.then(fn);
+  local = turn.catch(() => {});
+  return turn;
+}
+
+// One line, in turn: Layla, or the browser's own voice if she cannot connect. Never both at once.
+export function sayLine(text: string, signal: AbortSignal): Promise<void> {
+  return inTurn(async () => {
+    if (signal.aborted || (await sayCalmly(text, signal))) return;
+    await current; // a call that failed half way is fully hung up first
+    if (signal.aborted || !("speechSynthesis" in window)) return;
+    speechSynthesis.cancel();
+    await new Promise<void>((resolve) => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.85;
+      u.onend = u.onerror = () => resolve();
+      signal.addEventListener("abort", () => (speechSynthesis.cancel(), resolve()), { once: true });
+      speechSynthesis.speak(u);
+    });
+  });
+}
+
+// Says `text` in the calm voice and resolves once the line is over, so a repeat never talks over it. Resolves false
+// when Vapi is not set up or the call could not start, so the caller can fall back to the browser's voice.
+// Aborting the signal hangs up.
 export async function sayCalmly(text: string, signal: AbortSignal): Promise<boolean> {
   if (!vapiConfigured) return false;
   let vapi: Vapi;
@@ -43,11 +71,18 @@ export async function sayCalmly(text: string, signal: AbortSignal): Promise<bool
   if (signal.aborted) return true;
 
   let quiet: ReturnType<typeof setTimeout> | undefined;
+  let finished = () => {};
+  const done = new Promise<void>((resolve) => (finished = resolve));
+  let hungUp = false;
   const hangUp = () => {
+    if (hungUp) return;
+    hungUp = true;
     clearTimeout(quiet);
     vapi.removeListener("speech-start", onStart);
     vapi.removeListener("speech-end", onEnd);
+    vapi.removeListener("call-end", hangUp);
     current = vapi.stop().catch(() => {});
+    void current.then(finished);
   };
   const onStart = () => clearTimeout(quiet);
   const onEnd = () => {
@@ -56,6 +91,7 @@ export async function sayCalmly(text: string, signal: AbortSignal): Promise<bool
   };
   vapi.on("speech-start", onStart);
   vapi.on("speech-end", onEnd);
+  vapi.on("call-end", hangUp); // the MAX_CALL_S cap, or Vapi ending it
   signal.addEventListener("abort", hangUp, { once: true });
 
   try {
@@ -67,7 +103,10 @@ export async function sayCalmly(text: string, signal: AbortSignal): Promise<bool
       undefined,
       { microphonePreflightEnabled: false },
     );
-    if (call) return true;
+    if (call) {
+      await done;
+      return true;
+    }
   } catch (e) {
     console.warn("[vapi] call failed:", e);
   }

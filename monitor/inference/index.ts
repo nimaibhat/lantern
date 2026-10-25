@@ -39,7 +39,12 @@ const inference: MonitorModule = {
 
     ctx.bus.on("reading", (r) => engine.onReading(r));
 
+    // ROOM_FROM=closest: the hub's Tracking page says the room (the laptop the phone is closest to, sensing/closest.ts)
+    // and this engine only moves the dot, so the alerts and the laptop that speaks never disagree
+    const roomFromClosest = process.env.ROOM_FROM === "closest";
+    if (roomFromClosest) ctx.log("inference", "rooms come from the closest laptop (ROOM_FROM=closest); this engine moves the dot only");
     const send = (e: InferenceEvent) => {
+      if (roomFromClosest) return;
       if (e.k === "location") {
         ctx.log("loc", `${e.d.prevRoomId ?? "-"} > ${e.d.roomId} (${e.d.confidence})`);
         ctx.bus.emit("location", e.d);

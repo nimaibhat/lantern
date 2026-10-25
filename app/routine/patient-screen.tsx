@@ -14,11 +14,17 @@ import type { LiveFrame, PatientMode, RiskKind, Room, RoutineStep } from "@/lib/
 import { companionEnabled, companionFromCue, startCompanion, warmMicrophone, type Companion } from "./companion";
 import { RoutinePlayer } from "./player";
 import { chime, hush, speak, unlockAudio } from "./sound";
-import { preloadVapi, sayCalmly } from "./vapi-voice";
+import { inTurn, preloadVapi, sayCalmly } from "./vapi-voice";
 import "./patient.css";
 
+// A laptop in another room opens this page by the hub's hotspot address, so "localhost" here means the hub.
+const onHub = (url: string) => (typeof window === "undefined" ? url : url.replace(/\/\/localhost(?=[:/]|$)/, `//${window.location.hostname}`));
 const MONITOR_WS = process.env.NEXT_PUBLIC_MONITOR_WS || "ws://localhost:8787/ws/live";
 const MONITOR = process.env.NEXT_PUBLIC_MONITOR_URL || "http://localhost:8787";
+const CUE_PAUSE_MS = 5000;
+// At night the bedtime line is said twice, this far apart, in each reminder.
+const NIGHT_SAYS = 2;
+const NIGHT_GAP_MS = 5000;
 
 interface Shown {
   mode: PatientMode;
@@ -65,7 +71,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
     let ws: WebSocket | undefined, retry: ReturnType<typeof setTimeout> | undefined, delay = 1000, stopped = false;
     const connect = () => {
       try {
-        ws = new WebSocket(MONITOR_WS);
+        ws = new WebSocket(onHub(MONITOR_WS));
       } catch {
         return; // mixed content (ws:// from https://)
       }
@@ -128,9 +134,9 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
   };
 
   // Words for the screen: the caregiver's recording when there is one, otherwise the calm Vapi voice (Layla), and
-  // the browser's own voice if Vapi is not set up or cannot connect.
+  // the browser's own voice if Vapi is not set up or cannot connect. One at a time, with any other tab on this laptop.
   const calmCall = useRef<AbortController | undefined>(undefined);
-  const say = useCallback(async (words: string, voicePath?: string) => {
+  const say = useCallback((words: string, voicePath?: string) => inTurn(async () => {
     if (!voicePath) {
       calmCall.current?.abort();
       const call = (calmCall.current = new AbortController());
@@ -146,7 +152,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
         void speak(words, night).then(resolve);
       });
     });
-  }, [night]); // media() only changes with the household, which never changes on this page
+  }), [night]); // media() only changes with the household, which never changes on this page
 
   // One arrival, one sequence: chime, then the words (or the companion), never two voices at once.
   const said = useRef(0);
@@ -179,6 +185,9 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
         return;
       }
 
+      // Same pause as the screen's fade-in (patient.css): nothing happens at once, then the chime as the photo appears.
+      await new Promise((r) => setTimeout(r, CUE_PAUSE_MS));
+      if (cancelled) return;
       await chime(night);
       if (cancelled) return;
       const kind = view.riskEventId ? kinds.current.get(view.riskEventId) : undefined;
@@ -186,7 +195,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
         const riskId = view.riskEventId;
         try {
           const c = await startCompanion({ name, kind, message: view.message, detail: view.detail, night }, {
-            onHelp: (reason) => void fetch(`${MONITOR}/help`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ riskEventId: riskId, reason }) }).catch(() => {}),
+            onHelp: (reason) => void fetch(`${onHub(MONITOR)}/help`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ riskEventId: riskId, reason }) }).catch(() => {}),
             onEnd: () => {
               if (companion.current?.riskId === riskId) companion.current = undefined;
             },
@@ -200,7 +209,12 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
           // No microphone, no network, or a bad key: the scripted voice below still plays.
         }
       }
-      if (!cancelled) await say(words, view.voicePath);
+      // Back to bed at night: the same words again after a short pause, so a sleepy person catches them.
+      const times = night && (kind === "night-wandering" || kind === "kitchen-night") ? NIGHT_SAYS : 1;
+      for (let i = 0; i < times && !cancelled; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, NIGHT_GAP_MS));
+        if (!cancelled) await say(words, view.voicePath);
+      }
     })();
 
     return () => {
@@ -238,13 +252,7 @@ export function PatientScreen({ steps, rooms, householdId, name, quiet, preview,
           {view.photoPath && <img className="pt-photo" src={media(view.photoPath)} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />}
           <p className="pt-message">{view.message}</p>
           {view.detail && <p className="pt-detail">{view.detail}</p>}
-          {view.route && view.route.length > 1 && (
-            <ol className="pt-route" aria-label="The way back">
-              {view.route.map((r, i) => (
-                <li key={`${r}-${i}`} className={i === 0 ? "here" : i === view.route!.length - 1 ? "goal" : ""}>{r}</li>
-              ))}
-            </ol>
-          )}
+          {view.route && view.route.length > 1 && <p className="pt-route">{view.route.join("  →  ")}</p>}
         </div>
       )}
 

@@ -228,3 +228,31 @@ test("zone rules saved in Supabase read back as the monitor's rules", () => {
   assert.deepEqual(rule, { id: "h1-living-greet", householdId: "h1", roomKind: "living", startHour: 8, endHour: 20, action: "greet" });
   assert.equal(ruleFromRow({ id: "k", household_id: "h1", room_kind: "kitchen", kind: "kitchen-night", start_hour: 22, end_hour: 6, action: "redirect" }).kind, "kitchen-night");
 });
+
+test("with their own bedroom set, any other room at night but the bathroom is a reminder at once", () => {
+  const risks: RiskEvent[] = [];
+  let n = 0;
+  const kinds: Record<string, RoomKind> = { "bedroom-1": "bedroom", "bedroom-2": "bedroom", hallway: "hallway", bathroom: "bathroom" };
+  const engine = createRiskEngine({
+    householdId: "h1",
+    household: { quietHoursStart: "21:00", quietHoursEnd: "07:00", timezone: "America/New_York" },
+    rules: RULES,
+    roomKind: (id) => kinds[id],
+    ownBedroom: () => "bedroom-1",
+    nightAnyRoom: true,
+    emit: (r) => risks.push(r),
+    now: () => at("03:00"),
+    newId: () => `k${++n}`,
+  });
+  const enter = (roomId: string, hhmm = "03:00") =>
+    engine.onLocation({ id: "l", householdId: "h1", roomId, confidence: 1, source: "sim", ts: new Date(at(hhmm)).toISOString() });
+
+  enter("bedroom-1");
+  enter("bathroom");
+  assert.equal(risks.length, 0, "the bathroom at night is fine");
+  enter("bedroom-2");
+  assert.deepEqual(risks.map((r) => [r.kind, r.roomId]), [["night-wandering", "bedroom-2"]], "another bedroom is not their bed");
+  engine.track({ ...risks[0], state: "resolved" });
+  enter("hallway", "14:00");
+  assert.equal(risks.length, 1, "by day the hallway is fine");
+});

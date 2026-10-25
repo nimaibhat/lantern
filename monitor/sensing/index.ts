@@ -3,6 +3,7 @@
 import type { MonitorModule } from "../module";
 import { HttpError } from "../module";
 import { registerCalibration } from "./calibrate";
+import { registerClosest } from "./closest";
 import { createIngest } from "./ingest";
 import { registerNearest } from "./nearest";
 import { registerReplay } from "./replay";
@@ -42,6 +43,9 @@ const sensing: MonitorModule = {
 
     // Strongest-listener fallback room estimate (off unless NEAREST_ROOM=1; the classifier decides the room)
     registerNearest(ctx);
+
+    // The closest laptop as the hub's Tracking page sees it (POST /closest, used with ROOM_FROM=closest)
+    registerClosest(ctx);
   },
 };
 
