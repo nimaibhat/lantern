@@ -92,15 +92,15 @@ test("alerts and cues hear the room the live dot is in, once it has stayed there
   };
   walk({ x: 300, y: 72 }, 0, 4000);
   assert.deepEqual(said, ["kitchen"]);
-  walk({ x: 320, y: 240 }, 4100, 10000);
+  walk({ x: 320, y: 240 }, 4100, 14000); // 26 ft through the hallway, at walking pace
   assert.equal(said.at(-1), "tv-room");
-  assert.equal(engine.tick(t0 + 10050)?.roomId, "tv-room", "the plan and the cues agree");
+  assert.equal(engine.tick(t0 + 14050)?.roomId, "tv-room", "the plan and the cues agree");
   assert.equal(engine.room, "tv-room");
 
   // A sensor placed while they sit there rebuilds the home model; that is not a move, so nothing new is said
   const before = said.length;
   engine.setHome({ ...home, version: home.version + 1 });
-  walk({ x: 320, y: 240 }, 10100, 14000);
+  walk({ x: 320, y: 240 }, 14100, 18000);
   assert.equal(said.length, before, `said ${said.slice(before).join(", ")}`);
   assert.equal(engine.room, "tv-room");
 });

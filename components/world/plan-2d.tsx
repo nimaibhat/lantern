@@ -174,8 +174,8 @@ export function Plan2D({ state, dragMode, onDrag, onDrop, ghost, mobility, measu
           Place at least two listeners (Edit zones) to pinpoint where the person is
         </text>
       )}
-      {/* The person: a trail drawn from the dot itself, a halo sized by the estimate's uncertainty, a beam where they are heading */}
-      {target && <LiveMarker target={target} velocity={ghost ? undefined : position?.velocity} spreadIn={ghost ? 10 : position?.spreadIn} trail={!ghost} />}
+      {/* The person: a halo sized by the estimate's uncertainty and a beam where they are heading */}
+      {target && <LiveMarker target={target} velocity={ghost ? undefined : position?.velocity} spreadIn={ghost ? 10 : position?.spreadIn} trail={false} />}
 
       {tape && distance(tape.a, tape.b) > 0.5 && <Tape a={tape.a} b={tape.b} />}
     </svg>

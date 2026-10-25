@@ -6,9 +6,13 @@
 
 import { useCallback, useRef } from "react";
 import { LiveMarker, type LiveFeed } from "@/components/world/live-marker";
+import { roughFeet } from "@/lib/sensing/feet";
 import type { Vec2 } from "@/lib/types";
 
 export interface PlanSensor { id: string; x: number; y: number; label: string; rssi?: number; online: boolean }
+
+// Past this the estimate is only "far" (the formula stops at 45 ft), so the plan shows no number
+export const FAR_FT = 40;
 
 // About -95 dBm is the edge of hearing, -50 is right next to it.
 export const strength = (rssi?: number) => (rssi === undefined ? 0 : Math.max(0, Math.min(1, (rssi + 95) / 45)));
@@ -55,16 +59,16 @@ export function LiveLayer({ feed, stale, sensors }: { feed?: () => LiveFeed | un
             <title>{`${s.label}${s.online && s.rssi !== undefined ? `, ${s.rssi} dBm` : s.online ? "" : ", offline"}`}</title>
             <circle className="fp-sensor-ring" r={8 + 10 * k} />
             <rect x={-5} y={-5} width={10} height={10} rx={2.5} />
-            {s.online && s.rssi !== undefined && (
+            {s.online && s.rssi !== undefined && roughFeet(s.rssi) < FAR_FT && (
               <text className="fp-sensor-db" y={19}>
-                {s.rssi}
+                {Math.round(roughFeet(s.rssi))} ft
               </text>
             )}
           </g>
         );
       })}
 
-      {feed && <LiveMarker feed={feed} onFrame={onFrame} />}
+      {feed && <LiveMarker feed={feed} onFrame={onFrame} trail={false} />}
     </g>
   );
 }

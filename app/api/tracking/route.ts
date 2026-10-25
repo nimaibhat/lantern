@@ -307,8 +307,11 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
   }
   void syncPlacements([{ id: receiverId, label, room_id: null, online: true }], { force: true });
   const clientProtocol = body.protocol === "https:" || body.protocol === "http:" ? body.protocol : undefined;
-  const listening = body.listen && body.hub && requestFromHub(request) ? await listenHere(receiverId, !!body.replace, earPostUrl(request, clientProtocol)) : false;
-  return Response.json({ ok: true, deviceId: receiverId, label, listening });
+  // The hub's Python scanner is optional. Without it (scanner: false) the page hands over the PowerShell listener.
+  const hubAsked = !!body.listen && !!body.hub && requestFromHub(request);
+  const scanner = hubAsked && (await scannerReady());
+  const listening = scanner ? await listenHere(receiverId, !!body.replace, earPostUrl(request, clientProtocol)) : false;
+  return Response.json({ ok: true, deviceId: receiverId, label, listening, ...(hubAsked && !scanner ? { scanner: false } : {}) });
 }
 
 async function hear(body: { deviceId?: string; rssi?: number }) {

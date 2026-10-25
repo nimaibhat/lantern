@@ -7,6 +7,7 @@ import { roomNamed } from "@/lib/world/names";
 import { baselinePosterior } from "./baseline";
 import { RoomHmm } from "./hmm";
 import { MISSING, align, knnPosterior, usable, type KnnModel } from "./knn";
+import { BetweenSensors } from "./between";
 import { FastPositioner, type FastOptions } from "./fast";
 import { FloorFilter, type FloorFilterOptions } from "./floor-filter";
 import { PositionTracker, estimatePosition } from "./position";
@@ -33,6 +34,7 @@ export interface EngineOptions {
   positioner?: "grid" | "centroid"; // grid: the wall-aware floor filter; centroid: the old weighted centroid, for comparison
   floor?: FloorFilterOptions;
   live?: false | FastOptions; // the low-lag dot from raw readings; off, or tuned. Without raw readings the frame path draws the dot
+  dot?: "sensors" | "grid"; // sensors: between the nearest sensors by distance (default); grid: the wall-aware floor filter
   stay?: number; // HMM self-transition per 1 s frame
   eps?: number; // HMM probability of a move the doors do not allow
   newId?: () => string;
@@ -60,7 +62,7 @@ export class InferenceEngine {
   private rooms: RoomTracker;
   private pos!: PositionTracker;
   private floor?: FloorFilter;
-  private fast?: FastPositioner;
+  private fast?: FastPositioner | BetweenSensors;
   private online: Record<string, boolean> = {};
   private gridRooms = false; // no trained model for this home: the floor grid decides the room too
   private spreadIn?: number;
@@ -97,7 +99,7 @@ export class InferenceEngine {
     this.receiverRoom = Object.fromEntries(home.anchors.map((a) => [a.receiverId, roomAt(home, a.position)?.id ?? a.receiverId]));
     const floor = this.opts.positioner === "centroid" ? undefined : new FloorFilter(home, this.opts.floor);
     this.floor = floor?.ready ? floor : undefined;
-    const fast = this.opts.live === false ? undefined : new FastPositioner(home, this.opts.live);
+    const fast = this.opts.live === false ? undefined : this.opts.dot === "grid" ? new FastPositioner(home, this.opts.live) : new BetweenSensors(home);
     this.fast = fast?.ready ? fast : undefined;
     this.fitModels();
     // A sensor placed or moved is a new home model, not a move: alerts keep the room they were told, if it is still here
@@ -241,9 +243,9 @@ export class InferenceEngine {
     // Live readings: the fast dot, not held to the believed room (the floor grid keeps it out of walls), and the room
     // it is standing in. Room changes for alerts still come from the steadier tracker in onFrame.
     if (this.fast && this.fast.lastReadingTs && ts - this.fast.lastReadingTs <= STALE_MS) {
-      const e = this.fast.tick(ts, this.online, this.last.belief) ?? this.fast.hold();
-      // The fast path learns this home's walls; the frame grid uses what it learned
-      if (this.floor && this.floor.wallDb !== this.fast.wallDb) this.floor.setWallDb(this.fast.wallDb);
+      const e = (this.fast instanceof FastPositioner ? this.fast.tick(ts, this.online, this.last.belief) : this.fast.tick(ts, this.online)) ?? this.fast.hold();
+      // The grid dot learns this home's walls; the frame grid uses what it learned
+      if (this.floor && this.fast instanceof FastPositioner && this.floor.wallDb !== this.fast.wallDb) this.floor.setWallDb(this.fast.wallDb);
       // Never had a fix (no listener with a known position hears the tag): fall through to the frame path below
       if (e) this.follow(ts, e.room, e.share);
       if (e) return {
@@ -277,6 +279,7 @@ export class InferenceEngine {
     return {
       classifier: this.gridRooms ? "floor grid (no model trained for this home)" : knn?.algo === "knn" && knn.vectors.length ? `knn k=${knn.k} (${knn.vectors.length} vectors)` : "strongest receiver",
       positioner: this.floor ? `floor grid (${this.floor.cells.length} cells)` : "weighted centroid",
+      dot: this.fast instanceof BetweenSensors ? "between the nearest sensors" : this.fast ? "floor grid" : "frames only",
       accuracy: knn?.accuracy, dataset: knn?.dataset, trainedAt: knn?.createdAt,
       predictor: markov ? `markov (${Object.keys(markov.counts).length} contexts)` : "none",
       hmm: this.opts.useHmm !== false, rooms: this.roomIds, receivers: Object.keys(this.anchors).sort(),

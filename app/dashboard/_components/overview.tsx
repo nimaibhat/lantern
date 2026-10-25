@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { roomName } from "@/lib/dashboard/rooms";
 import type { Activity, AuditItem, Household, Receiver, RiskEvent, Room, ScanSummary } from "@/lib/types";
+import { roughFeet } from "@/lib/sensing/feet";
 import { pointInPolygon } from "@/lib/world/geometry";
 import { FloorPlan } from "./floor-plan";
-import { strength, type PlanSensor } from "./live-layer";
+import { FAR_FT, strength, type PlanSensor } from "./live-layer";
 import { SayToTv } from "./say-to-tv";
 import { useMonitorLive } from "./use-monitor-live";
 
@@ -194,7 +195,9 @@ export function Overview({ household, rooms, receivers, auditItems, scan, ...ini
                   <span className="sensor-bars" aria-hidden>
                     {[1, 2, 3, 4].map((i) => <i key={i} className={i <= bars ? "on" : undefined} />)}
                   </span>
-                  <span className="mono muted">{!s.online ? "off" : s.rssi === undefined ? "quiet" : s.rssi}</span>
+                  <span className="mono muted" title={s.rssi === undefined ? undefined : `${s.rssi} dBm`}>
+                    {!s.online ? "off" : s.rssi === undefined ? "quiet" : roughFeet(s.rssi) >= FAR_FT ? "far" : `${Math.round(roughFeet(s.rssi))} ft`}
+                  </span>
                   {editing && (
                     <button
                       className={pinning === s.id ? "pin-btn on" : "pin-btn"}
