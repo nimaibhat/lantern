@@ -107,7 +107,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
   const [mineName, setMineName] = useState("");
   const [hub, setHub] = useState(false);
   const [launchId, setLaunchId] = useState<string | null>(null);
-  const [macCmd, setMacCmd] = useState<string | null>(null);
+  const [termCmd, setTermCmd] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState("");
   const [watching, setWatching] = useState(false);
@@ -420,7 +420,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
     }
     setNote("");
     setLaunchId(null);
-    setMacCmd(null);
+    setTermCmd(null);
     setCopied(false);
     setBusy(true);
     if (existingId) deviceIdRef.current = existingId;
@@ -447,7 +447,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
           const id = deviceIdRef.current;
-          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Chrome cannot access Bluetooth on this Mac. Copy the command below, paste it in Terminal, and leave it running.");
           return;
         }
@@ -471,7 +471,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           }
           // Web Bluetooth paired but no signal — offer Terminal command
           const id = deviceIdRef.current;
-          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Chrome paired but the signal isn't coming through. Copy the command below and paste it in Terminal.");
           return;
         }
@@ -480,7 +480,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
           const saved = await saveLaptop(trimmed, false, false);
           if (!saved) return;
           const id = deviceIdRef.current;
-          setMacCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
+          setTermCmd(`bash <(curl -sk '${location.origin}/api/tracking/ear-mac?id=${id}')`);
           setNote("Copy the command below and paste it in Terminal. It will install what it needs and start listening.");
         }
         return;
@@ -504,7 +504,13 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         return;
       }
       if (!bluetooth()) {
-        setNote("This browser does not support Bluetooth. Open this page in Google Chrome (not Edge or Firefox).");
+        // No Web Bluetooth — offer PowerShell command
+        const saved = await saveLaptop(trimmed, false, false);
+        if (!saved) return;
+        const id = deviceIdRef.current;
+        const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+        setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
+        setNote("This browser does not support Bluetooth. Open PowerShell on this laptop, paste the command below, and leave it running.");
         return;
       }
       if (browserCanWatch()) {
@@ -525,18 +531,22 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
             setNote("Connected and hearing the phone. Leave this tab open.");
             return;
           }
-          // Web Bluetooth isn't delivering signal — offer the .bat listener
-          setLaunchId(deviceIdRef.current);
-          setNote("Chrome paired but can't read the signal on this laptop. Click \"Open listener\" below to download a small file — open it and leave the window running.");
+          // Web Bluetooth isn't delivering signal — offer PowerShell command
+          const id = deviceIdRef.current;
+          const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+          setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
+          setNote("Chrome paired but can't read the signal on this laptop. Open PowerShell, paste the command below, and leave it running.");
           return;
         }
       }
-      // Web Bluetooth not available at all — save device and show .bat download
+      // Web Bluetooth not available at all — show PowerShell command
       {
         const saved = await saveLaptop(trimmed, false, false);
         if (!saved) return;
-        setLaunchId(deviceIdRef.current);
-        setNote("Click \"Open listener\" below to download a small file. Open it and leave the window running — it will scan Bluetooth and send the signal to the hub.");
+        const id = deviceIdRef.current;
+        const earUrl = `${location.origin}/api/tracking/ear?id=${id}`;
+        setTermCmd(`powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`);
+        setNote("Open PowerShell on this laptop, paste the command below, and leave it running. It will scan Bluetooth and send the signal to the hub.");
       }
     } catch {
       setNote("Could not start listening. Try again.");
@@ -701,7 +711,7 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
         </form>
       )}
       {shownNote && <p>{shownNote}</p>}
-      {macCmd && (
+      {termCmd && (
         <div className="mac-cmd" style={{ marginTop: "0.5rem" }}>
           <code style={{
             display: "block",
@@ -712,12 +722,12 @@ export function Tracker({ receivers }: { receivers: Receiver[] }) {
             fontSize: "0.85rem",
             wordBreak: "break-all",
             userSelect: "all",
-          }}>{macCmd}</code>
+          }}>{termCmd}</code>
           <button
             className="btn small"
             style={{ marginTop: "0.4rem" }}
             onClick={() => {
-              navigator.clipboard.writeText(macCmd).then(() => {
+              navigator.clipboard.writeText(termCmd).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }).catch(() => {});

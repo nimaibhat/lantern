@@ -127,6 +127,15 @@ export function earBat(deviceId: string, postUrl: string, label: string): string
 // The scanner script is about 9000 characters. A downloaded file that long never
 // starts. This file is short: the other laptop downloads it, then pulls the script.
 // The window stays open so a Bluetooth or download error is visible.
+/** PowerShell one-liner the user can paste into a terminal — no .bat file, no SmartScreen. */
+export function earWinOneLiner(deviceId: string, postUrl: string): string {
+  if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
+  const post = postUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\/\S+\/api\/tracking$/.test(post)) throw new Error("bad url");
+  const earUrl = `${post}/ear?id=${deviceId.toLowerCase()}`;
+  return `powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; [System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; $p=Join-Path $env:TEMP 'lantern-ear.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '${earUrl}' -OutFile $p; Unblock-File $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p"`;
+}
+
 export function earLaunch(deviceId: string, postUrl: string, label: string): string {
   if (!/^ear-[a-f0-9]{8}$/i.test(deviceId)) throw new Error("bad device");
   const post = postUrl.trim().replace(/\/$/, "");
