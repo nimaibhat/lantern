@@ -70,8 +70,21 @@ function requestFromHub(request: Request): boolean {
 
 const PYTHON = process.platform === "win32" ? "py" : "python3";
 
-function startEar(deviceId: string, postUrl: string): Promise<boolean> {
+// The hub's scanner needs bleak. Without it the script dies on import, a moment after the page said "listening", so
+// check first and let Pair fall back to the PowerShell listener. A yes is remembered; a no is checked again next time.
+async function scannerReady(): Promise<boolean> {
+  const g = globalThis as typeof globalThis & { __lanternBleak?: boolean };
+  if (g.__lanternBleak) return true;
+  const ok = await new Promise<boolean>((resolve) =>
+    execFile(PYTHON, ["-c", "import bleak"], { windowsHide: true, timeout: 20_000 }, (error) => resolve(!error)),
+  );
+  g.__lanternBleak = ok;
+  return ok;
+}
+
+async function startEar(deviceId: string, postUrl: string): Promise<boolean> {
   stopEar();
+  if (!(await scannerReady())) return false;
   return new Promise((resolve) => {
     let proc: ChildProcess;
     try {
@@ -95,7 +108,7 @@ function startEar(deviceId: string, postUrl: string): Promise<boolean> {
     };
     proc.once("error", () => finish(false));
     proc.once("exit", () => finish(false));
-    setTimeout(() => finish(proc.exitCode == null && !proc.killed), 700);
+    setTimeout(() => finish(proc.exitCode == null && !proc.killed), 2500); // long enough to see it crash on start
   });
 }
 
@@ -283,8 +296,9 @@ async function join(body: { name?: string; deviceId?: string; listen?: boolean; 
       : `ear-${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
   }
 
+  // No room_id: a laptop pairing again keeps the room it was set to; a new one starts with none
   const { error } = await db!.from("receivers").upsert(
-    { id: receiverId, household_id: HOUSEHOLD_ID, room_id: null, label, last_seen_at: new Date().toISOString() },
+    { id: receiverId, household_id: HOUSEHOLD_ID, label, last_seen_at: new Date().toISOString() },
     { onConflict: "id" },
   );
   if (error) {
