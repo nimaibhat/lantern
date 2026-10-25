@@ -106,7 +106,14 @@ function shareUrl(): string {
       if (net.family === "IPv4" && !net.internal) found.push(net.address);
     }
   }
-  const host = found.find((ip) => ip.startsWith("192.168.")) || found.find((ip) => ip.startsWith("10.")) || found[0] || "localhost";
+  // 172.28 is a virtual adapter on this laptop. Other devices cannot open it.
+  const reachable = found.filter((ip) => !ip.startsWith("172.28."));
+  const host =
+    reachable.find((ip) => ip.startsWith("192.168.")) ||
+    reachable.find((ip) => ip.startsWith("172.20.10.")) ||
+    reachable.find((ip) => ip.startsWith("10.")) ||
+    reachable[0] ||
+    "localhost";
   return `https://${host}:${port}/dashboard/tracking`;
 }
 
