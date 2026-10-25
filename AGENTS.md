@@ -53,7 +53,7 @@ ios/project.yml      XcodeGen spec (cd ios && xcodegen)
 listener/            Python BLE listeners (bleak, runs on laptop receivers)
 monitor/             Node service: HTTP + WS server, module host
 monitor/world/       serves the newest home model, routes through doors
-monitor/sensing/     listener ingest, RssiWindow, SensorFrame, simulator
+monitor/sensing/     listener ingest, Supabase relay (Tracking laptops on other hubs), RssiWindow, SensorFrame, simulator
 monitor/inference/   room classifier, door-graph HMM, position, predictor
 monitor/actions/     risk engine, responder (grace, repeating cues), Twilio, Vapi calls, time away, TV
 tools/               dev helpers (mock-rssi, mock-walk, replay, check-env, find-roku, calibrate-offsets, position-eval, position-lag)
